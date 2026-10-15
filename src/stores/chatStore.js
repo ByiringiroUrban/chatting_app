@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { initialConversations } from '../data/mockConversations';
 import { initialMessages } from '../data/mockMessages';
+import { chatApi } from '../services/api';
+import { wsService } from '../services/websocket';
 
 const CONV_STORAGE = 'muraho_conversations';
 const MSG_STORAGE = 'muraho_messages';
@@ -18,6 +20,15 @@ export const useChatStore = create((set, get) => ({
   isContactInfoOpen: false,
 
   setActiveChatId: (chatId) => {
+    const currentId = get().activeChatId;
+    if (currentId && currentId !== chatId) {
+      wsService.leaveConversation(currentId);
+    }
+    if (chatId) {
+      wsService.joinConversation(chatId);
+      chatApi.markAsRead(chatId).catch(() => {});
+      get().fetchMessages(chatId);
+    }
     set((state) => {
       // Mark unread as 0 when opening chat
       const updatedConvs = state.conversations.map((c) =>
@@ -25,6 +36,89 @@ export const useChatStore = create((set, get) => ({
       );
       localStorage.setItem(CONV_STORAGE, JSON.stringify(updatedConvs));
       return { activeChatId: chatId, conversations: updatedConvs, replyingTo: null };
+    });
+  },
+
+  fetchConversations: async () => {
+    try {
+      const convs = await chatApi.getConversations();
+      if (convs && convs.length > 0) {
+        set({ conversations: convs });
+        localStorage.setItem(CONV_STORAGE, JSON.stringify(convs));
+      }
+    } catch (e) {
+      // Graceful fallback to cached state
+    }
+  },
+
+  fetchMessages: async (chatId) => {
+    if (!chatId) return;
+    try {
+      const msgs = await chatApi.getMessages(chatId);
+      if (msgs && msgs.length > 0) {
+        set((state) => {
+          const newMessages = { ...state.messages, [chatId]: msgs };
+          localStorage.setItem(MSG_STORAGE, JSON.stringify(newMessages));
+          return { messages: newMessages };
+        });
+      }
+    } catch (e) {
+      // Graceful fallback
+    }
+  },
+
+  addInboundMessage: (msg) => {
+    const { activeChatId } = get();
+    const chatId = msg.conversationId;
+    if (!chatId) return;
+
+    set((state) => {
+      const curList = state.messages[chatId] || [];
+      if (curList.some((m) => m.id === msg.id)) return state;
+
+      const updatedChatMsgs = [...curList, msg];
+      const newMessages = { ...state.messages, [chatId]: updatedChatMsgs };
+
+      const updatedConvs = state.conversations.map((c) => {
+        if (c.id === chatId) {
+          return {
+            ...c,
+            unreadCount: c.id === activeChatId ? 0 : (c.unreadCount || 0) + 1,
+            isTyping: false,
+            lastMessage: {
+              id: msg.id,
+              senderId: msg.senderId,
+              text: msg.text,
+              timestamp: msg.timestamp,
+              status: msg.status,
+              type: msg.type
+            }
+          };
+        }
+        return c;
+      });
+
+      localStorage.setItem(MSG_STORAGE, JSON.stringify(newMessages));
+      localStorage.setItem(CONV_STORAGE, JSON.stringify(updatedConvs));
+      return { messages: newMessages, conversations: updatedConvs };
+    });
+  },
+
+  setInboundTyping: ({ conversationId, isTyping }) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId ? { ...c, isTyping } : c
+      )
+    }));
+  },
+
+  setInboundReaction: ({ messageId, reactions }) => {
+    const { activeChatId } = get();
+    if (!activeChatId) return;
+    set((state) => {
+      const cur = state.messages[activeChatId] || [];
+      const updated = cur.map((m) => (m.id === messageId ? { ...m, reactions } : m));
+      return { messages: { ...state.messages, [activeChatId]: updated } };
     });
   },
 
@@ -97,6 +191,18 @@ export const useChatStore = create((set, get) => ({
     });
     localStorage.setItem(MSG_STORAGE, JSON.stringify(newMessages));
     localStorage.setItem(CONV_STORAGE, JSON.stringify(updatedConvs));
+
+    // Send to Python backend if reachable
+    chatApi.sendMessage(activeChatId, {
+      text: newMsg.text,
+      type: newMsg.type,
+      mediaUrl: newMsg.mediaUrl,
+      fileName: newMsg.fileName,
+      fileSize: newMsg.fileSize,
+      duration: newMsg.duration,
+      caption: newMsg.caption,
+      replyTo: newMsg.replyTo
+    }).catch(() => {});
 
     // Simulate tick to 'delivered' then 'read'
     setTimeout(() => {

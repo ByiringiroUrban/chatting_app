@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { wsService } from './services/websocket';
+import { useChatStore } from './stores/chatStore';
+import { useAuthStore } from './stores/authStore';
 
 // Layouts
 import AppLayout from './components/layout/AppLayout';
@@ -34,6 +37,38 @@ import PricingPage from './pages/monetization/PricingPage';
 import BillingPage from './pages/monetization/BillingPage';
 
 export default function App() {
+  const { user } = useAuthStore();
+  const { fetchConversations, addInboundMessage, setInboundTyping, setInboundReaction } = useChatStore();
+
+  useEffect(() => {
+    // 1. Initial backend sync
+    fetchConversations();
+
+    // 2. Real-time WebSocket connection
+    const currentUserId = user?.id || "user_me";
+    wsService.connect(currentUserId);
+
+    // 3. Register real-time event handlers
+    const unsubMsg = wsService.on("chat.message", (msg) => {
+      addInboundMessage(msg);
+    });
+
+    const unsubTyping = wsService.on("chat.typing", (data) => {
+      setInboundTyping(data);
+    });
+
+    const unsubReaction = wsService.on("chat.reaction", (data) => {
+      setInboundReaction(data);
+    });
+
+    return () => {
+      unsubMsg();
+      unsubTyping();
+      unsubReaction();
+      wsService.disconnect();
+    };
+  }, [user?.id]);
+
   return (
     <BrowserRouter>
       <Routes>
