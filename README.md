@@ -80,3 +80,19 @@ Preview the production build:
 ```bash
 npm run preview
 ```
+
+---
+
+## 🔌 Running the Backend (FastAPI & WebSockets)
+
+The backend service is located in the [`backend/`](file:///d:/New%20Downloads/Chatting%20app/backend) folder.
+
+1. Navigate to backend: `cd backend`
+2. Follow the comprehensive setup and running guide in [backend/README.md](file:///d:/New%20Downloads/Chatting%20app/backend/README.md).
+3. Quick run:
+   ```bash
+   pip install -r requirements.txt
+   python run.py
+   ```
+   Interactive Swagger documentation will be available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
