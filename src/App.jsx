@@ -6,6 +6,7 @@ import { useAuthStore } from './stores/authStore';
 
 // Layouts
 import AppLayout from './components/layout/AppLayout';
+import ToastContainer from './components/common/ToastContainer';
 
 // Auth Pages
 import LoginPage from './pages/auth/LoginPage';
@@ -37,15 +38,21 @@ import PricingPage from './pages/monetization/PricingPage';
 import BillingPage from './pages/monetization/BillingPage';
 
 export default function App() {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const { fetchConversations, addInboundMessage, setInboundTyping, setInboundReaction } = useChatStore();
 
   useEffect(() => {
+    // Only connect WebSocket and sync if user is authenticated
+    if (!isAuthenticated || !user) {
+      wsService.disconnect();
+      return;
+    }
+
     // 1. Initial backend sync
     fetchConversations();
 
     // 2. Real-time WebSocket connection
-    const currentUserId = user?.id || "user_me";
+    const currentUserId = user.id || "user_me";
     wsService.connect(currentUserId);
 
     // 3. Register real-time event handlers
@@ -67,13 +74,14 @@ export default function App() {
       unsubReaction();
       wsService.disconnect();
     };
-  }, [user?.id]);
+  }, [isAuthenticated, user?.id]);
 
   return (
     <BrowserRouter>
+      <ToastContainer />
       <Routes>
-        {/* Redirect root to /app/chats */}
-        <Route path="/" element={<Navigate to="/app/chats" replace />} />
+        {/* Redirect root based on auth status */}
+        <Route path="/" element={<Navigate to={isAuthenticated ? "/app/chats" : "/login"} replace />} />
 
         {/* Public Authentication routes */}
         <Route path="/login" element={<LoginPage />} />

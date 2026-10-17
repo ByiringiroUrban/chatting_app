@@ -4,10 +4,10 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
-import { User, Mail, Phone, AtSign, Shield, Camera } from 'lucide-react';
+import { User, Mail, Phone, AtSign, Shield, Camera, LogOut } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfile, openLogoutModal } = useAuthStore();
   const { showToast } = useUiStore();
 
   const [name, setName] = useState(user?.name || '');
@@ -94,7 +94,18 @@ export default function ProfilePage() {
               />
             </div>
 
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <Button 
+                type="button" 
+                variant="danger" 
+                size="sm" 
+                onClick={openLogoutModal}
+                className="flex items-center gap-1.5"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
+              </Button>
+
               <Button type="submit" variant="primary">
                 Save Changes
               </Button>

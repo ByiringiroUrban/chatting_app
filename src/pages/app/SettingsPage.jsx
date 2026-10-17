@@ -13,12 +13,13 @@ import {
   Check, 
   Moon, 
   Sun, 
-  Laptop 
+  Laptop,
+  LogOut 
 } from 'lucide-react';
 
 export default function SettingsPage() {
   const { theme, setTheme, language, setLanguage, showToast } = useUiStore();
-  const { logout } = useAuthStore();
+  const { openLogoutModal } = useAuthStore();
 
   const [lastSeenPrivacy, setLastSeenPrivacy] = useState('everyone');
   const [readReceipts, setReadReceipts] = useState(true);
@@ -175,8 +176,9 @@ export default function SettingsPage() {
 
         {/* 5. Logout & Account Actions */}
         <div className="flex justify-between items-center pt-2">
-          <Button variant="danger" size="sm" onClick={logout}>
-            Log Out of Muraho
+          <Button variant="danger" size="sm" onClick={openLogoutModal} className="flex items-center gap-1.5">
+            <LogOut className="w-4 h-4" />
+            <span>Log Out of Muraho</span>
           </Button>
 
           <Button variant="primary" onClick={handleSaveSettings}>

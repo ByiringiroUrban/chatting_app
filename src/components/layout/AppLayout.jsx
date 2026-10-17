@@ -1,22 +1,25 @@
 import React from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import MainNavigation from './MainNavigation';
 import BottomNavigation from './BottomNavigation';
-import ToastContainer from '../common/ToastContainer';
 import ActiveCallModal from '../calls/ActiveCallModal';
+import LogoutModal from '../common/LogoutModal';
 import { useCallStore } from '../../stores/callStore';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function AppLayout() {
   const location = useLocation();
   const { activeCall } = useCallStore();
+  const { isAuthenticated } = useAuthStore();
 
-  // Determine if we should show bottom navigation (don't hide inside general app pages)
-  const isBusinessPage = location.pathname.startsWith('/business');
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg-light dark:bg-bg-dark text-slate-900 dark:text-slate-100">
-      {/* Toast notifications */}
-      <ToastContainer />
+      {/* Logout Confirmation Modal */}
+      <LogoutModal />
 
       {/* Active Call UI (modal overlay when voice/video call is ongoing) */}
       {activeCall && <ActiveCallModal />}

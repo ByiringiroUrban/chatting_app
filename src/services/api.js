@@ -33,7 +33,8 @@ export const authApi = {
   verifyOtp: (otpCode) => request("/auth/verify-otp", { method: "POST", body: JSON.stringify({ otpCode }) }),
   getMe: () => request("/users/me"),
   updateMe: (data) => request("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
-  getContacts: () => request("/users/contacts")
+  getContacts: () => request("/users/contacts"),
+  logout: () => request("/auth/logout", { method: "POST" })
 };
 
 export const chatApi = {

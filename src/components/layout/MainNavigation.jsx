@@ -10,7 +10,8 @@ import {
   Building2, 
   CreditCard, 
   Settings, 
-  UserCircle 
+  UserCircle,
+  LogOut 
 } from 'lucide-react';
 import Avatar from '../common/Avatar';
 import ThemeToggle from '../common/ThemeToggle';
@@ -19,7 +20,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 
 export default function MainNavigation() {
-  const { user } = useAuthStore();
+  const { user, openLogoutModal } = useAuthStore();
   const { conversations } = useChatStore();
 
   const totalUnread = conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
@@ -118,6 +119,16 @@ export default function MainNavigation() {
             className="ring-2 ring-brand-500/40"
           />
         </NavLink>
+
+        {/* Dedicated Logout Action Button */}
+        <button
+          type="button"
+          onClick={openLogoutModal}
+          className="group flex items-center justify-center w-11 h-11 rounded-2xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all active:scale-90"
+          title="Log Out of Muraho"
+        >
+          <LogOut className="w-5 h-5 transition-transform group-hover:scale-110" />
+        </button>
       </div>
     </aside>
   );

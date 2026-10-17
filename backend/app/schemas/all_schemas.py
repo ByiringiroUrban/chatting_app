@@ -5,10 +5,12 @@ from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     fullName: str
-    username: str
-    email: str
+    username: Optional[str] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
-    password: str
+    password: Optional[str] = "password123"
+    avatar: Optional[str] = None
+    bio: Optional[str] = None
 
 class LoginRequest(BaseModel):
     emailOrPhone: str

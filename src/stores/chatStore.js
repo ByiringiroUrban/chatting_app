@@ -19,6 +19,18 @@ export const useChatStore = create((set, get) => ({
   isSearchingChat: false,
   isContactInfoOpen: false,
 
+  resetChatState: () => {
+    set({
+      activeChatId: null,
+      replyingTo: null,
+      forwardingMessage: null,
+      isRecordingVoice: false,
+      isSearchingChat: false,
+      isContactInfoOpen: false,
+      searchQuery: ""
+    });
+  },
+
   setActiveChatId: (chatId) => {
     const currentId = get().activeChatId;
     if (currentId && currentId !== chatId) {

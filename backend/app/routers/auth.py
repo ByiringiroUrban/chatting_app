@@ -33,26 +33,48 @@ def format_user_dict(u: User) -> dict:
 
 @router.post("/auth/register", response_model=TokenResponse)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Check if username or email exists
-    result = await db.execute(
-        select(User).where(or_(User.email == req.email, User.username == req.username))
-    )
+    if not req.email and not req.phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide either a phone number or email address to register."
+        )
+
+    # Determine or generate username
+    username = (req.username or "").strip()
+    if not username:
+        base_name = req.fullName.strip().lower().replace(" ", "_") if req.fullName else "user"
+        identifier = req.phone or req.email or "rw"
+        seed_hash = abs(hash(identifier)) % 10000
+        username = f"{base_name}_{seed_hash}"
+
+    # Check existing user
+    conditions = [User.username == username]
+    if req.email:
+        conditions.append(User.email == req.email.strip())
+    if req.phone:
+        conditions.append(User.phone == req.phone.strip())
+
+    result = await db.execute(select(User).where(or_(*conditions)))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this email or username already exists"
+            detail="A user with this phone number, email, or username already exists."
         )
     
-    new_user_id = f"user_{int(hash(req.username)) % 10000000}"
+    new_user_id = f"user_{abs(hash(username + (req.phone or req.email or ''))) % 10000000}"
+    # In case email is required in the DB schema, generate a placeholder if not provided
+    email_val = req.email.strip() if req.email else f"{req.phone.strip().replace(' ', '').replace('+', '')}@phone.muraho.rw"
+    phone_val = req.phone.strip() if req.phone else None
+
     new_user = User(
         id=new_user_id,
-        name=req.fullName,
-        username=req.username,
-        email=req.email,
-        phone=req.phone or "+250 788 000 000",
-        hashed_password=hash_password(req.password),
-        avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-        bio="Hello! I am using Muraho Rwanda.",
+        name=req.fullName.strip() if req.fullName else "Muraho User",
+        username=username,
+        email=email_val,
+        phone=phone_val,
+        hashed_password=hash_password(req.password or "password123"),
+        avatar=req.avatar or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+        bio=req.bio or "Hey there! I am using Muraho Rwanda.",
         status="online",
         role="user",
         is_business=False
@@ -109,6 +131,13 @@ async def forgot_password(req: ResetPasswordRequest):
     return {
         "success": True,
         "message": f"Password reset instructions dispatched to {req.emailOrPhone}"
+    }
+
+@router.post("/auth/logout")
+async def logout():
+    return {
+        "success": True,
+        "message": "Successfully logged out from Muraho session."
     }
 
 # ----------------- USERS & CONTACTS -----------------

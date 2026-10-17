@@ -1,0 +1,26 @@
+export const countryCodes = [
+  { code: 'RW', name: 'Rwanda', dialCode: '+250', flag: '🇷🇼', format: '788 123 456' },
+  { code: 'KE', name: 'Kenya', dialCode: '+254', flag: '🇰🇪', format: '712 345 678' },
+  { code: 'UG', name: 'Uganda', dialCode: '+256', flag: '🇺🇬', format: '772 123 456' },
+  { code: 'TZ', name: 'Tanzania', dialCode: '+255', flag: '🇹🇿', format: '712 345 678' },
+  { code: 'BI', name: 'Burundi', dialCode: '+257', flag: '🇧🇮', format: '79 123 456' },
+  { code: 'CD', name: 'DR Congo', dialCode: '+243', flag: '🇨🇩', format: '81 123 4567' },
+  { code: 'ZA', name: 'South Africa', dialCode: '+27', flag: '🇿🇦', format: '82 123 4567' },
+  { code: 'NG', name: 'Nigeria', dialCode: '+234', flag: '🇳🇬', format: '802 123 4567' },
+  { code: 'GH', name: 'Ghana', dialCode: '+233', flag: '🇬🇭', format: '24 123 4567' },
+  { code: 'ET', name: 'Ethiopia', dialCode: '+251', flag: '🇪🇹', format: '91 123 4567' },
+  { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸', format: '(555) 123-4567' },
+  { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧', format: '7911 123456' },
+  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦', format: '(555) 123-4567' },
+  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', format: '6 12 34 56 78' },
+  { code: 'BE', name: 'Belgium', dialCode: '+32', flag: '🇧🇪', format: '470 12 34 56' },
+  { code: 'DE', name: 'Germany', dialCode: '+49', flag: '🇩🇪', format: '151 12345678' },
+  { code: 'AE', name: 'United Arab Emirates', dialCode: '+971', flag: '🇦🇪', format: '50 123 4567' },
+  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', format: '98765 43210' },
+  { code: 'CN', name: 'China', dialCode: '+86', flag: '🇨🇳', format: '138 1234 5678' },
+  { code: 'AU', name: 'Australia', dialCode: '+61', flag: '🇦🇺', format: '412 345 678' },
+  { code: 'BR', name: 'Brazil', dialCode: '+55', flag: '🇧🇷', format: '11 91234-5678' },
+  { code: 'EG', name: 'Egypt', dialCode: '+20', flag: '🇪🇬', format: '10 1234 5678' },
+];
+
+export const defaultCountry = countryCodes[0]; // Rwanda (+250)
