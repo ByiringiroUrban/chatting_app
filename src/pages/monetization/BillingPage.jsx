@@ -7,10 +7,17 @@ import { CreditCard, Download, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useUiStore } from '../../stores/uiStore';
 
 export default function BillingPage() {
-  const { billingHistory, plans, currentPlanId } = useSubscriptionStore();
+  const { billingHistory, plans, currentPlanId, fetchSubscriptionData, isLoading } = useSubscriptionStore();
   const { showToast } = useUiStore();
 
-  const currentPlan = plans.find(p => p.id === currentPlanId) || plans[2];
+  React.useEffect(() => {
+    fetchSubscriptionData();
+  }, []);
+
+  const currentPlan = plans.find(p => p.id === currentPlanId) || plans[0] || {
+    name: "Business Plan",
+    tagline: "For Rwandan entrepreneurs & verified shops"
+  };
 
   const handleDownloadInvoice = (invNum) => {
     showToast(`Downloading invoice ${invNum}...`, "info");

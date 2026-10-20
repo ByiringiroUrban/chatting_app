@@ -7,7 +7,11 @@ import { useStatusStore } from '../../stores/statusStore';
 import { Plus, Eye, Sparkles } from 'lucide-react';
 
 export default function StatusPage() {
-  const { statuses, openStatusViewer, setCreateModalOpen } = useStatusStore();
+  const { statuses, fetchStatuses, openStatusViewer, setCreateModalOpen, isLoading } = useStatusStore();
+
+  React.useEffect(() => {
+    fetchStatuses();
+  }, []);
 
   const myStatus = statuses.find(s => s.isMe);
   const otherStatuses = statuses.filter(s => !s.isMe);

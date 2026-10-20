@@ -83,11 +83,17 @@ export default function ChatHeader({ conversation, onBack }) {
               {conversation.isMuted && <BellOff className="w-3 h-3 text-slate-400 flex-shrink-0" />}
             </h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {conversation.type === 'group' 
-                ? `${conversation.memberCount || 'Community'} members` 
-                : conversation.isTyping 
-                  ? <span className="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">typing...</span> 
-                  : conversation.status === 'online' ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">online</span> : conversation.lastSeen || 'Active recently'
+              {conversation.isTyping 
+                ? <span className="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
+                    {conversation.type === 'group' && conversation.typingUser 
+                      ? `${conversation.typingUser} is typing...` 
+                      : 'typing...'}
+                  </span>
+                : conversation.type === 'group' 
+                  ? `${conversation.memberCount || 'Community'} members` 
+                  : conversation.status === 'online' 
+                    ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">online</span> 
+                    : conversation.lastSeen || 'Active recently'
               }
             </p>
           </div>

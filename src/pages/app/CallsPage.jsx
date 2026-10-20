@@ -15,8 +15,12 @@ import {
 } from 'lucide-react';
 
 export default function CallsPage() {
-  const { callHistory, startCall, receiveIncomingCall } = useCallStore();
+  const { callHistory, startCall, receiveIncomingCall, fetchCallHistory, isLoading } = useCallStore();
   const [filter, setFilter] = useState('all'); // 'all' | 'missed'
+
+  React.useEffect(() => {
+    fetchCallHistory();
+  }, []);
 
   const filtered = callHistory.filter(c => filter === 'all' || c.status === 'missed');
 

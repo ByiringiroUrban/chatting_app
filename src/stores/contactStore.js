@@ -1,19 +1,53 @@
 import { create } from 'zustand';
-import { mockContacts } from '../data/mockUsers';
+import { authApi } from '../services/api';
 
-const CONTACTS_STORAGE = 'muraho_contacts';
+const getContactsStorageKey = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem('muraho_auth_user'));
+    return u?.id ? `muraho_contacts_${u.id}` : 'muraho_contacts_guest';
+  } catch (e) {
+    return 'muraho_contacts_guest';
+  }
+};
 
 export const useContactStore = create((set, get) => ({
-  contacts: JSON.parse(localStorage.getItem(CONTACTS_STORAGE)) || mockContacts,
+  contacts: [],
   searchQuery: "",
   selectedContact: null,
   isAddModalOpen: false,
+  isLoading: false,
+
+  resetContactsState: () => {
+    localStorage.removeItem(getContactsStorageKey());
+    localStorage.removeItem('muraho_contacts');
+    set({
+      contacts: [],
+      searchQuery: "",
+      selectedContact: null,
+      isAddModalOpen: false,
+      isLoading: false
+    });
+  },
 
   setSearchQuery: (query) => set({ searchQuery: query }),
   setSelectedContact: (contact) => set({ selectedContact: contact }),
   setAddModalOpen: (open) => set({ isAddModalOpen: open }),
 
-  addContact: ({ name, phone, email, bio, avatar, label }) => {
+  fetchContacts: async () => {
+    set({ isLoading: true });
+    try {
+      const data = await authApi.getContacts();
+      if (Array.isArray(data)) {
+        set({ contacts: data, isLoading: false });
+        localStorage.setItem(getContactsStorageKey(), JSON.stringify(data));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch contacts from DB:", err.message);
+      set({ isLoading: false });
+    }
+  },
+
+  addContact: async ({ name, phone, email, bio, avatar, label }) => {
     const newContact = {
       id: `user_${Date.now()}`,
       name,
@@ -21,7 +55,7 @@ export const useContactStore = create((set, get) => ({
       phone,
       email: email || `${name.toLowerCase().replace(/\s+/g, '.')}@example.rw`,
       bio: bio || "Muraho user",
-      avatar: avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+      avatar: avatar || null,
       status: "offline",
       lastSeen: "Recently added",
       isFavorite: false,

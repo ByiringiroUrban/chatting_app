@@ -19,8 +19,14 @@ export default function ChatListItem({ conversation, isActive, onClick }) {
     memberCount
   } = conversation;
 
-  // Determine tick status for message sent by user_me
-  const isMine = lastMessage?.senderId === 'user_me';
+  // Determine tick status for message sent by logged-in user
+  let isMine = false;
+  try {
+    const authUser = JSON.parse(localStorage.getItem('muraho_auth_user'));
+    if (authUser?.id && lastMessage?.senderId === authUser.id) isMine = true;
+  } catch(e) {}
+  if (!isMine && lastMessage?.senderId === 'user_me') isMine = true;
+
   const renderStatusTicks = () => {
     if (!isMine) return null;
     if (lastMessage?.status === 'read') {

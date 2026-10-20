@@ -26,12 +26,18 @@ export default function ChannelsPage() {
     setActiveChannelId, 
     toggleSubscribe, 
     setCreateModalOpen, 
-    addReactionToPost 
+    addReactionToPost,
+    fetchChannels,
+    isLoading
   } = useChannelStore();
 
   const { showToast } = useUiStore();
   const [activeCategory, setActiveCategory] = useState('All');
   const [mobileShowFeed, setMobileShowFeed] = useState(false);
+
+  React.useEffect(() => {
+    fetchChannels(activeCategory === 'All' ? null : activeCategory);
+  }, [activeCategory]);
 
   const categories = ["All", "Technology", "AI & Innovation", "Business", "Startups", "Education", "Sports"];
 

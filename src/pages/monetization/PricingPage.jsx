@@ -17,11 +17,17 @@ export default function PricingPage() {
     openCheckoutModal, 
     closeCheckoutModal, 
     selectedPlanForCheckout, 
-    upgradeToPlan 
+    upgradeToPlan,
+    fetchSubscriptionData,
+    isLoading
   } = useSubscriptionStore();
 
   const { showToast } = useUiStore();
   const [paymentMethod, setPaymentMethod] = useState('MTN Mobile Money (*182#)');
+
+  React.useEffect(() => {
+    fetchSubscriptionData();
+  }, []);
 
   const handleCheckoutConfirm = () => {
     if (!selectedPlanForCheckout) return;

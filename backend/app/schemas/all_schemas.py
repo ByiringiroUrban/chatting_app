@@ -17,11 +17,23 @@ class LoginRequest(BaseModel):
     password: str
     rememberMe: Optional[bool] = False
 
+class SendOtpRequest(BaseModel):
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    fullName: Optional[str] = "Friend"
+
 class VerifyOtpRequest(BaseModel):
     otpCode: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
 class ResetPasswordRequest(BaseModel):
     emailOrPhone: str
+
+class ResetPasswordConfirmRequest(BaseModel):
+    emailOrPhone: str
+    otpCode: str
+    newPassword: str
 
 class TokenResponse(BaseModel):
     access_token: str

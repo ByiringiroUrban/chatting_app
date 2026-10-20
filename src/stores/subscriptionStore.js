@@ -1,20 +1,43 @@
 import { create } from 'zustand';
-import { pricingPlans, mockBillingHistory } from '../data/mockPlans';
+import { subscriptionApi } from '../services/api';
 
 const PLAN_STORAGE = 'muraho_current_plan';
 const BILLING_STORAGE = 'muraho_billing_history';
 
 export const useSubscriptionStore = create((set, get) => ({
-  plans: pricingPlans,
+  plans: [],
   currentPlanId: localStorage.getItem(PLAN_STORAGE) || "plan_business",
   billingCycle: "monthly", // 'monthly' | 'yearly'
-  billingHistory: JSON.parse(localStorage.getItem(BILLING_STORAGE)) || mockBillingHistory,
+  billingHistory: JSON.parse(localStorage.getItem(BILLING_STORAGE)) || [],
   isCheckoutModalOpen: false,
   selectedPlanForCheckout: null,
+  isLoading: false,
 
   setBillingCycle: (cycle) => set({ billingCycle: cycle }),
   openCheckoutModal: (plan) => set({ isCheckoutModalOpen: true, selectedPlanForCheckout: plan }),
   closeCheckoutModal: () => set({ isCheckoutModalOpen: false, selectedPlanForCheckout: null }),
+
+  fetchSubscriptionData: async () => {
+    set({ isLoading: true });
+    try {
+      const [plansData, historyData] = await Promise.allSettled([
+        subscriptionApi.getPlans(),
+        subscriptionApi.getHistory()
+      ]);
+      const updates = {};
+      if (plansData.status === 'fulfilled' && Array.isArray(plansData.value)) {
+        updates.plans = plansData.value;
+      }
+      if (historyData.status === 'fulfilled' && Array.isArray(historyData.value)) {
+        updates.billingHistory = historyData.value;
+        localStorage.setItem(BILLING_STORAGE, JSON.stringify(historyData.value));
+      }
+      set({ ...updates, isLoading: false });
+    } catch (e) {
+      console.warn("Failed to fetch subscription data:", e);
+      set({ isLoading: false });
+    }
+  },
 
   upgradeToPlan: (planId, paymentMethod = "MTN MoMo (*182#)") => {
     const plan = get().plans.find(p => p.id === planId);

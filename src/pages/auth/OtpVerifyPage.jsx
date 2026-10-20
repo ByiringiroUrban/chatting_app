@@ -4,13 +4,22 @@ import Button from '../../components/common/Button';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 import { ShieldCheck, RotateCcw } from 'lucide-react';
+import ThemeToggle from '../../components/common/ThemeToggle';
 
 export default function OtpVerifyPage() {
-  const [otp, setOtp] = useState(['1', '2', '3', '4', '5', '6']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [countdown, setCountdown] = useState(45);
-  const { verifyOtp, isLoading, error } = useAuthStore();
+  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const { verifyOtp, sendOtp, isLoading, error } = useAuthStore();
   const { showToast } = useUiStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if query params or state has email/phone
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('target') || '';
+    if (target) setEmailOrPhone(target);
+  }, []);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -35,20 +44,34 @@ export default function OtpVerifyPage() {
   const handleVerify = async (e) => {
     e.preventDefault();
     const code = otp.join('');
-    const success = await verifyOtp(code);
+    const success = await verifyOtp(code, emailOrPhone || null);
     if (success) {
-      showToast("Phone verified successfully!", "success");
+      showToast("Account verified successfully!", "success");
       navigate('/app/chats');
     }
   };
 
-  const resendCode = () => {
+  const resendCode = async () => {
     setCountdown(60);
-    showToast("A new 6-digit code has been sent to your phone via SMS.", "info");
+    const isEmail = emailOrPhone.includes('@');
+    showToast(`Dispatching new code to ${emailOrPhone || 'your contact'}...`, 'info');
+    const res = await sendOtp({
+      email: isEmail ? emailOrPhone : null,
+      phone: !isEmail && emailOrPhone ? emailOrPhone : null,
+      fullName: 'Friend'
+    });
+    if (res?.emailSent) {
+      showToast(`New verification code delivered to ${emailOrPhone}!`, 'success');
+    } else {
+      showToast("A new 6-digit code has been sent.", "info");
+    }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-bg-light dark:bg-bg-dark">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-bg-light dark:bg-bg-dark relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xl text-center">
         
         <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-brand-950/40 text-brand-700 dark:text-teal-400 flex items-center justify-center mx-auto mb-4">
@@ -71,7 +94,7 @@ export default function OtpVerifyPage() {
                 maxLength={1}
                 value={digit}
                 onChange={(e) => handleChange(idx, e.target.value)}
-                className="w-11 h-14 text-center text-xl font-bold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all"
+                className="w-11 h-14 text-center text-2xl font-black bg-slate-100 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all shadow-sm"
               />
             ))}
           </div>

@@ -1,17 +1,32 @@
 import { create } from 'zustand';
-import { initialStatuses } from '../data/mockStatuses';
+import { statusApi } from '../services/api';
 
 const STATUS_STORAGE = 'muraho_statuses';
 
 export const useStatusStore = create((set, get) => ({
-  statuses: JSON.parse(localStorage.getItem(STATUS_STORAGE)) || initialStatuses,
+  statuses: JSON.parse(localStorage.getItem(STATUS_STORAGE)) || [],
   activeStatus: null,
   activeItemIndex: 0,
   isViewerOpen: false,
   isPaused: false,
   isCreateModalOpen: false,
+  isLoading: false,
 
   setCreateModalOpen: (open) => set({ isCreateModalOpen: open }),
+
+  fetchStatuses: async () => {
+    set({ isLoading: true });
+    try {
+      const feed = await statusApi.getFeed();
+      if (Array.isArray(feed)) {
+        set({ statuses: feed, isLoading: false });
+        localStorage.setItem(STATUS_STORAGE, JSON.stringify(feed));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch statuses from DB:", err.message);
+      set({ isLoading: false });
+    }
+  },
   
   openStatusViewer: (statusId, itemIndex = 0) => {
     const status = get().statuses.find(s => s.id === statusId);
@@ -70,48 +85,20 @@ export const useStatusStore = create((set, get) => ({
     }
   },
 
-  addStatus: ({ type, text, backgroundColor, mediaUrl, caption }) => {
+  addStatus: async ({ type, text, backgroundColor, mediaUrl, caption }) => {
     const newItem = {
-      id: `item_me_${Date.now()}`,
       type,
       text,
       backgroundColor: backgroundColor || "from-teal-600 to-emerald-800",
       mediaUrl,
       caption,
-      timestamp: "Just now",
-      views: 0,
-      viewers: []
     };
 
-    set((state) => {
-      let foundMe = false;
-      const updated = state.statuses.map(s => {
-        if (s.isMe) {
-          foundMe = true;
-          return {
-            ...s,
-            timestamp: "Just now",
-            items: [newItem, ...s.items]
-          };
-        }
-        return s;
-      });
-
-      if (!foundMe) {
-        updated.unshift({
-          id: "status_me",
-          userId: "user_me",
-          userName: "My Status",
-          userAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-          isMe: true,
-          hasUnseen: false,
-          timestamp: "Just now",
-          items: [newItem]
-        });
-      }
-
-      localStorage.setItem(STATUS_STORAGE, JSON.stringify(updated));
-      return { statuses: updated, isCreateModalOpen: false };
-    });
+    try {
+      await statusApi.createStatus([newItem]);
+      await get().fetchStatuses();
+    } catch (e) {
+      console.warn("Backend status creation fallback:", e.message);
+    }
   }
 }));

@@ -78,7 +78,8 @@
   background-size: 24px 24px;
 }
 
-.dark .chat-pattern-dark {
+.chat-pattern-dark,
+.dark .chat-pattern-light {
   background-color: #0B1220;
   background-image: radial-gradient(#1E293B 0.75px, transparent 0.75px);
   background-size: 24px 24px;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import BusinessSidebar from '../../components/business/BusinessSidebar';
 import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
@@ -6,6 +6,7 @@ import Input from '../../components/common/Input';
 import Badge from '../../components/common/Badge';
 import { useAdStore } from '../../stores/adStore';
 import { useUiStore } from '../../stores/uiStore';
+import { uploadApi } from '../../services/api';
 import { 
   Megaphone, 
   Plus, 
@@ -13,7 +14,9 @@ import {
   MousePointer, 
   TrendingUp, 
   Pause, 
-  Play 
+  Play,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -26,14 +29,21 @@ import {
 } from 'recharts';
 
 export default function BusinessAdsPage() {
-  const { campaigns, performanceTrends, isCreateModalOpen, setCreateModalOpen, createCampaign, toggleCampaignStatus } = useAdStore();
+  const { campaigns, performanceTrends, isCreateModalOpen, setCreateModalOpen, createCampaign, toggleCampaignStatus, fetchCampaigns, isLoading } = useAdStore();
   const { showToast } = useUiStore();
+
+  React.useEffect(() => {
+    fetchCampaigns();
+  }, []);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [audience, setAudience] = useState('Tech & Office Workers in Kigali');
   const [budgetRwf, setBudgetRwf] = useState('150000');
-  const [creativeUrl, setCreativeUrl] = useState('');
+  const [creativeFile, setCreativeFile] = useState(null);
+  const [creativePreview, setCreativePreview] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const audiences = [
     "Tech & Office Workers in Kigali",
@@ -43,11 +53,47 @@ export default function BusinessAdsPage() {
     "Rwandan Diaspora"
   ];
 
-  const handleCreate = (e) => {
+  const handleCreativeSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      showToast("Creative exceeds 25 MB limit", "warning");
+      return;
+    }
+    setCreativeFile(file);
+    setCreativePreview(URL.createObjectURL(file));
+  };
+
+  const handleClose = () => {
+    setTitle('');
+    setDescription('');
+    setCreativeFile(null);
+    setCreativePreview(null);
+    setIsUploading(false);
+    setCreateModalOpen(false);
+  };
+
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (!title.trim() || !budgetRwf) {
       showToast("Please enter title and budget", "warning");
       return;
+    }
+
+    let finalCreativeUrl = "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=600&q=80";
+    if (creativeFile) {
+      setIsUploading(true);
+      try {
+        const uploadResult = await uploadApi.uploadFile(creativeFile);
+        const rawUrl = uploadResult.url || '';
+        finalCreativeUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`;
+      } catch (err) {
+        console.error("Ad creative upload failed:", err);
+        showToast("Failed to upload creative banner", "error");
+        setIsUploading(false);
+        return;
+      }
+      setIsUploading(false);
     }
 
     createCampaign({
@@ -55,13 +101,11 @@ export default function BusinessAdsPage() {
       description: description.trim(),
       audience,
       budgetRwf,
-      creativeUrl
+      creativeUrl: finalCreativeUrl
     });
 
     showToast("Ad campaign launched!", "success");
-    setTitle('');
-    setDescription('');
-    setCreateModalOpen(false);
+    handleClose();
   };
 
   return (
@@ -71,7 +115,7 @@ export default function BusinessAdsPage() {
       {/* New Ad Modal */}
       <Modal
         isOpen={isCreateModalOpen}
-        onClose={() => setCreateModalOpen(false)}
+        onClose={handleClose}
         title="Create Targeted Ad Campaign"
         description="Reach thousands of active Muraho users across Rwanda."
       >
@@ -115,19 +159,53 @@ export default function BusinessAdsPage() {
             required
           />
 
-          <Input
-            label="Creative Image URL"
-            placeholder="https://images.unsplash.com/..."
-            value={creativeUrl}
-            onChange={(e) => setCreativeUrl(e.target.value)}
-          />
+          <div>
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">
+              Creative Banner Image
+            </label>
+            <div 
+              className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 text-center flex flex-col items-center justify-center cursor-pointer hover:border-brand-400 dark:hover:border-teal-600 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {creativePreview ? (
+                <div className="flex items-center gap-3 w-full">
+                  <img src={creativePreview} alt="Preview" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
+                      {creativeFile ? creativeFile.name : 'Selected creative'}
+                    </p>
+                    <p className="text-[11px] text-teal-600 dark:text-teal-400 mt-0.5">Click to choose another photo</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Click to choose local creative photo</p>
+                  <p className="text-[11px] text-slate-400">JPEG, PNG, WebP (up to 25 MB)</p>
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleCreativeSelect}
+              />
+            </div>
+          </div>
 
           <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button variant="ghost" onClick={() => setCreateModalOpen(false)}>
+            <Button variant="ghost" onClick={handleClose} disabled={isUploading}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary">
-              Launch Campaign
+            <Button type="submit" variant="primary" disabled={isUploading}>
+              {isUploading ? (
+                <span className="flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...
+                </span>
+              ) : (
+                "Launch Campaign"
+              )}
             </Button>
           </div>
         </form>

@@ -1,22 +1,55 @@
 import { create } from 'zustand';
-import { mockBusinessProfile, mockCustomerInbox, mockBusinessAnalytics } from '../data/mockBusiness';
-import { initialProducts } from '../data/mockProducts';
+import { businessApi } from '../services/api';
 
 const BIZ_PROFILE_STORAGE = 'muraho_biz_profile';
 const BIZ_PRODUCTS_STORAGE = 'muraho_biz_products';
 const BIZ_INBOX_STORAGE = 'muraho_biz_inbox';
 
 export const useBusinessStore = create((set, get) => ({
-  profile: JSON.parse(localStorage.getItem(BIZ_PROFILE_STORAGE)) || mockBusinessProfile,
-  products: JSON.parse(localStorage.getItem(BIZ_PRODUCTS_STORAGE)) || initialProducts,
-  customerInbox: JSON.parse(localStorage.getItem(BIZ_INBOX_STORAGE)) || mockCustomerInbox,
-  analytics: mockBusinessAnalytics,
+  profile: JSON.parse(localStorage.getItem(BIZ_PROFILE_STORAGE)) || null,
+  products: JSON.parse(localStorage.getItem(BIZ_PRODUCTS_STORAGE)) || [],
+  customerInbox: JSON.parse(localStorage.getItem(BIZ_INBOX_STORAGE)) || [],
+  analytics: null,
   selectedCustomer: null,
   isProductModalOpen: false,
   editingProduct: null,
+  isLoading: false,
 
   setSelectedCustomer: (cust) => set({ selectedCustomer: cust }),
   setProductModalOpen: (open, product = null) => set({ isProductModalOpen: open, editingProduct: product }),
+
+  fetchBusinessData: async () => {
+    set({ isLoading: true });
+    try {
+      const [profileData, catalogData, inboxData, analyticsData] = await Promise.allSettled([
+        businessApi.getProfile(),
+        businessApi.getCatalog(),
+        businessApi.getInbox(),
+        businessApi.getAnalytics()
+      ]);
+
+      const updates = {};
+      if (profileData.status === 'fulfilled' && profileData.value) {
+        updates.profile = profileData.value;
+        localStorage.setItem(BIZ_PROFILE_STORAGE, JSON.stringify(profileData.value));
+      }
+      if (catalogData.status === 'fulfilled' && Array.isArray(catalogData.value)) {
+        updates.products = catalogData.value;
+        localStorage.setItem(BIZ_PRODUCTS_STORAGE, JSON.stringify(catalogData.value));
+      }
+      if (inboxData.status === 'fulfilled' && Array.isArray(inboxData.value)) {
+        updates.customerInbox = inboxData.value;
+        localStorage.setItem(BIZ_INBOX_STORAGE, JSON.stringify(inboxData.value));
+      }
+      if (analyticsData.status === 'fulfilled' && analyticsData.value) {
+        updates.analytics = analyticsData.value;
+      }
+      set({ ...updates, isLoading: false });
+    } catch (e) {
+      console.warn("Business sync error:", e);
+      set({ isLoading: false });
+    }
+  },
 
   updateProfile: (updates) => {
     set((state) => {

@@ -5,7 +5,8 @@ class WebSocketService {
     this.userId = null;
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
+    this.maxReconnectAttempts = 50; // Allow many more reconnection attempts
+    this.isIntentionalClose = false;
   }
 
   connect(userId = "user_me") {
@@ -13,8 +14,11 @@ class WebSocketService {
       return;
     }
 
+    const token = localStorage.getItem("muraho_access_token") || "";
     this.userId = userId;
-    const wsUrl = import.meta.env.VITE_WS_URL || `ws://localhost:8000/ws/${userId}`;
+    this.isIntentionalClose = false;
+    const wsBase = import.meta.env.VITE_WS_URL || `ws://localhost:8000/ws`;
+    const wsUrl = `${wsBase.replace(/\/ws\/?$/, '')}/ws/${userId}?token=${encodeURIComponent(token)}`;
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -36,10 +40,12 @@ class WebSocketService {
         }
       };
 
-      this.ws.onclose = () => {
-        console.log("[Muraho WS] Disconnected");
+      this.ws.onclose = (event) => {
+        console.log("[Muraho WS] Disconnected", event.code);
         this.emit("status", { connected: false });
-        this.scheduleReconnect();
+        if (!this.isIntentionalClose) {
+          this.scheduleReconnect();
+        }
       };
 
       this.ws.onerror = (err) => {
@@ -54,11 +60,15 @@ class WebSocketService {
   scheduleReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+      console.log(`[Muraho WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = setTimeout(() => {
-        if (this.userId) this.connect(this.userId);
+        if (this.userId && !this.isIntentionalClose) this.connect(this.userId);
       }, delay);
+    } else {
+      console.warn("[Muraho WS] Max reconnection attempts reached. Connection lost.");
+      this.emit("status", { connected: false, maxRetriesReached: true });
     }
   }
 
@@ -111,11 +121,16 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.isIntentionalClose = true;
     clearTimeout(this.reconnectTimer);
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  get isConnected() {
+    return this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 }
 

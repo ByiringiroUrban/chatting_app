@@ -15,7 +15,7 @@ export default function MessageList({ messages = [], conversation = null }) {
   let lastDate = null;
 
   return (
-    <div className="flex-1 overflow-y-auto px-2.5 sm:px-4 py-3 space-y-1.5 chat-pattern-light dark:chat-pattern-dark">
+    <div className="flex-1 overflow-y-auto px-2.5 sm:px-4 py-3 space-y-1.5 chat-pattern-light dark:chat-pattern-dark bg-[#F8FAFC] dark:bg-[#0B1220]">
       {/* End to end WhatsApp style encryption disclaimer badge */}
       <div className="flex justify-center mb-3">
         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF8E6] dark:bg-[#182229] border border-[#FFE7A8] dark:border-[#222E35] text-[11px] text-[#54656F] dark:text-[#8696A0] shadow-2xs text-center max-w-sm sm:max-w-md select-none leading-relaxed">

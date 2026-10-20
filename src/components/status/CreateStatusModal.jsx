@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import { useStatusStore } from '../../stores/statusStore';
 import { useUiStore } from '../../stores/uiStore';
-import { Type, Image, Sparkles } from 'lucide-react';
+import { Type, Image, Sparkles, Upload, Loader2 } from 'lucide-react';
+import { uploadApi } from '../../services/api';
 
 export default function CreateStatusModal() {
   const { isCreateModalOpen, setCreateModalOpen, addStatus } = useStatusStore();
@@ -13,8 +14,11 @@ export default function CreateStatusModal() {
   const [statusType, setStatusType] = useState('text'); // 'text' | 'image'
   const [textContent, setTextContent] = useState('');
   const [selectedGradient, setSelectedGradient] = useState('from-teal-600 to-emerald-800');
-  const [imageUrl, setImageUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [caption, setCaption] = useState('');
+  const fileInputRef = useRef(null);
 
   const gradients = [
     { label: "Teal Forest", value: "from-teal-600 to-emerald-800" },
@@ -23,7 +27,29 @@ export default function CreateStatusModal() {
     { label: "Amber Dawn", value: "from-amber-600 to-orange-800" },
   ];
 
-  const handlePost = (e) => {
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      showToast("File exceeds 25 MB limit", "warning");
+      return;
+    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setSelectedFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleClose = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    setSelectedFile(null);
+    setTextContent('');
+    setCaption('');
+    setIsUploading(false);
+    setCreateModalOpen(false);
+  };
+
+  const handlePost = async (e) => {
     e.preventDefault();
     if (statusType === 'text') {
       if (!textContent.trim()) {
@@ -35,19 +61,32 @@ export default function CreateStatusModal() {
         text: textContent.trim(),
         backgroundColor: selectedGradient
       });
+      showToast("Status published!", "success");
+      handleClose();
     } else {
-      addStatus({
-        type: 'image',
-        mediaUrl: imageUrl || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80",
-        caption: caption.trim() || undefined
-      });
+      if (!selectedFile) {
+        showToast("Please select a photo from your local files", "warning");
+        return;
+      }
+      setIsUploading(true);
+      try {
+        const uploadResult = await uploadApi.uploadFile(selectedFile);
+        const rawUrl = uploadResult.url || '';
+        const mediaUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`;
+        addStatus({
+          type: 'image',
+          mediaUrl,
+          caption: caption.trim() || undefined
+        });
+        showToast("Status published!", "success");
+        handleClose();
+      } catch (err) {
+        console.error("Status upload error:", err);
+        showToast("Failed to upload status image", "error");
+      } finally {
+        setIsUploading(false);
+      }
     }
-
-    showToast("Status published!", "success");
-    setTextContent('');
-    setCaption('');
-    setImageUrl('');
-    setCreateModalOpen(false);
   };
 
   return (
@@ -117,14 +156,33 @@ export default function CreateStatusModal() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            <div 
+              className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-4 text-center flex flex-col items-center justify-center cursor-pointer hover:border-brand-400 dark:hover:border-teal-600 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {imagePreview ? (
+                <div className="relative group w-full max-h-48 flex justify-center">
+                  <img src={imagePreview} alt="Preview" className="max-h-44 rounded-xl object-contain" />
+                  <p className="text-[11px] text-slate-400 mt-1">Click to change photo</p>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Click to select local photo</p>
+                  <p className="text-[11px] text-slate-400">JPEG, PNG, GIF, WebP (up to 25 MB)</p>
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+            </div>
+
             <Input
-              label="Photo URL (Demo)"
-              placeholder="https://images.unsplash.com/..."
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-            />
-            <Input
-              label="Caption"
+              label="Caption (Optional)"
               placeholder="Add a caption..."
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
@@ -133,11 +191,17 @@ export default function CreateStatusModal() {
         )}
 
         <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <Button variant="ghost" onClick={() => setCreateModalOpen(false)}>
+          <Button variant="ghost" onClick={handleClose} disabled={isUploading}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary">
-            Share Status
+          <Button type="submit" variant="primary" disabled={isUploading}>
+            {isUploading ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Publishing...
+              </span>
+            ) : (
+              "Share Status"
+            )}
           </Button>
         </div>
       </form>

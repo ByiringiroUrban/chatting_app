@@ -10,10 +10,14 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Users, ShieldCheck, ArrowRight } from 'lucide-react';
 
 export default function GroupsPage() {
-  const { groups, setCreateModalOpen, setActiveGroupId, setMemberDrawerOpen } = useGroupStore();
+  const { groups, fetchGroups, setCreateModalOpen, setActiveGroupId, setMemberDrawerOpen, isLoading } = useGroupStore();
   const { setActiveChatId } = useChatStore();
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    fetchGroups();
+  }, []);
 
   const filtered = groups.filter(g => 
     g.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -22,7 +26,7 @@ export default function GroupsPage() {
 
   const handleOpenGroupChat = (group) => {
     setActiveGroupId(group.id);
-    setActiveChatId('conv_2'); // open group chat
+    setActiveChatId(`conv_${group.id}`);
     navigate('/app/chats');
   };
 

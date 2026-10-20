@@ -22,11 +22,15 @@ import {
 } from 'lucide-react';
 
 export default function ContactsPage() {
-  const { contacts, addContact, toggleFavorite, toggleBlock, deleteContact } = useContactStore();
+  const { contacts, fetchContacts, addContact, toggleFavorite, toggleBlock, deleteContact, isLoading } = useContactStore();
   const { setActiveChatId } = useChatStore();
   const { startCall } = useCallStore();
   const { showToast } = useUiStore();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    fetchContacts();
+  }, []);
 
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -40,8 +44,10 @@ export default function ContactsPage() {
     c.label?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleStartChat = (contact) => {
-    setActiveChatId('conv_1');
+  const { startDirectConversation } = useChatStore();
+
+  const handleStartChat = async (contact) => {
+    await startDirectConversation(contact);
     navigate('/app/chats');
   };
 

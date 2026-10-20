@@ -17,8 +17,12 @@ import {
 } from 'lucide-react';
 
 export default function BusinessInboxPage() {
-  const { customerInbox, updateCustomerStatus, updateCustomerNote } = useBusinessStore();
+  const { customerInbox, updateCustomerStatus, updateCustomerNote, fetchBusinessData, isLoading } = useBusinessStore();
   const { showToast } = useUiStore();
+
+  React.useEffect(() => {
+    fetchBusinessData();
+  }, []);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(customerInbox[0]?.id);
   const [filterStatus, setFilterStatus] = useState('All');

@@ -1,12 +1,27 @@
 import { create } from 'zustand';
-import { mockCallHistory } from '../data/mockCalls';
+import { callApi } from '../services/api';
 
 const CALLS_STORAGE = 'muraho_call_history';
 
 export const useCallStore = create((set, get) => ({
-  callHistory: JSON.parse(localStorage.getItem(CALLS_STORAGE)) || mockCallHistory,
-  activeCall: null, // null | { contact, type: 'voice'|'video', status: 'ringing'|'connected', isMuted: bool, isCameraOff: bool, isSpeakerOn: bool, durationSeconds: 0 }
+  callHistory: JSON.parse(localStorage.getItem(CALLS_STORAGE)) || [],
+  activeCall: null,
   callTimerInterval: null,
+  isLoading: false,
+
+  fetchCallHistory: async () => {
+    set({ isLoading: true });
+    try {
+      const data = await callApi.getHistory();
+      if (Array.isArray(data)) {
+        set({ callHistory: data, isLoading: false });
+        localStorage.setItem(CALLS_STORAGE, JSON.stringify(data));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch call history from DB:", err.message);
+      set({ isLoading: false });
+    }
+  },
 
   startCall: (contact, type = 'voice') => {
     // End any existing call

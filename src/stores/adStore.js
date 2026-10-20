@@ -1,14 +1,29 @@
 import { create } from 'zustand';
-import { initialCampaigns, adPerformanceTrends } from '../data/mockAds';
+import { adApi } from '../services/api';
 
 const ADS_STORAGE = 'muraho_ad_campaigns';
 
 export const useAdStore = create((set, get) => ({
-  campaigns: JSON.parse(localStorage.getItem(ADS_STORAGE)) || initialCampaigns,
-  performanceTrends: adPerformanceTrends,
+  campaigns: JSON.parse(localStorage.getItem(ADS_STORAGE)) || [],
+  performanceTrends: [],
   isCreateModalOpen: false,
+  isLoading: false,
 
   setCreateModalOpen: (open) => set({ isCreateModalOpen: open }),
+
+  fetchCampaigns: async () => {
+    set({ isLoading: true });
+    try {
+      const data = await adApi.getCampaigns();
+      if (Array.isArray(data)) {
+        set({ campaigns: data, isLoading: false });
+        localStorage.setItem(ADS_STORAGE, JSON.stringify(data));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch campaigns from DB:", err.message);
+      set({ isLoading: false });
+    }
+  },
 
   createCampaign: ({ title, description, audience, budgetRwf, startDate, endDate, creativeUrl }) => {
     const newCamp = {

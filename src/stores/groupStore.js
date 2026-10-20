@@ -1,43 +1,76 @@
 import { create } from 'zustand';
-import { mockGroups } from '../data/mockGroups';
+import { groupApi } from '../services/api';
 
-const GROUPS_STORAGE = 'muraho_groups';
+const getGroupsStorageKey = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem('muraho_auth_user'));
+    return u?.id ? `muraho_groups_${u.id}` : 'muraho_groups_guest';
+  } catch (e) {
+    return 'muraho_groups_guest';
+  }
+};
 
 export const useGroupStore = create((set, get) => ({
-  groups: JSON.parse(localStorage.getItem(GROUPS_STORAGE)) || mockGroups,
-  activeGroupId: "group_1",
+  groups: [],
+  activeGroupId: null,
   isCreateModalOpen: false,
   isMemberDrawerOpen: false,
+  isLoading: false,
+
+  resetGroupsState: () => {
+    localStorage.removeItem(getGroupsStorageKey());
+    localStorage.removeItem('muraho_groups');
+    set({
+      groups: [],
+      activeGroupId: null,
+      isCreateModalOpen: false,
+      isMemberDrawerOpen: false,
+      isLoading: false
+    });
+  },
 
   setCreateModalOpen: (open) => set({ isCreateModalOpen: open }),
   setMemberDrawerOpen: (open) => set({ isMemberDrawerOpen: open }),
   setActiveGroupId: (id) => set({ activeGroupId: id }),
 
-  createGroup: ({ name, description, avatar, selectedMembers = [] }) => {
-    const newGroup = {
-      id: `group_${Date.now()}`,
-      name,
-      description: description || "New community group on Muraho",
-      avatar: avatar || "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=300&q=80",
-      createdAt: new Date().toISOString().split('T')[0],
-      members: [
-        { id: "user_me", name: "Jean-Luc Mugisha", role: "admin", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" },
-        ...selectedMembers
-      ],
-      settings: {
-        onlyAdminsCanPost: false,
-        approveNewMembers: false,
-        allowMediaSharing: true
+  fetchGroups: async () => {
+    set({ isLoading: true });
+    try {
+      const data = await groupApi.getGroups();
+      if (Array.isArray(data)) {
+        set({ 
+          groups: data, 
+          isLoading: false, 
+          activeGroupId: get().activeGroupId || (data[0]?.id || null) 
+        });
+        localStorage.setItem(getGroupsStorageKey(), JSON.stringify(data));
       }
-    };
+    } catch (err) {
+      console.warn("Failed to fetch groups from DB:", err.message);
+      set({ isLoading: false });
+    }
+  },
 
-    set((state) => {
-      const updated = [newGroup, ...state.groups];
-      localStorage.setItem(GROUPS_STORAGE, JSON.stringify(updated));
-      return { groups: updated, isCreateModalOpen: false, activeGroupId: newGroup.id };
-    });
-
-    return newGroup;
+  createGroup: async ({ name, description, avatar, selectedMembers = [] }) => {
+    const memberIds = selectedMembers.map(m => m.id || m);
+    try {
+      const created = await groupApi.createGroup({
+        name,
+        description: description || "New community group on Muraho",
+        avatar: avatar || null,
+        memberIds
+      });
+      if (created) {
+        set((state) => {
+          const updated = [created, ...state.groups];
+          localStorage.setItem(GROUPS_STORAGE, JSON.stringify(updated));
+          return { groups: updated, isCreateModalOpen: false, activeGroupId: created.id };
+        });
+        return created;
+      }
+    } catch (e) {
+      console.error("Failed to create group on backend:", e);
+    }
   },
 
   addMember: (groupId, member) => {

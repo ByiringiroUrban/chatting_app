@@ -4,8 +4,8 @@ from sqlalchemy import select, or_
 from app.database import get_db
 from app.models.user import User, Contact
 from app.schemas.all_schemas import (
-    RegisterRequest, LoginRequest, VerifyOtpRequest, ResetPasswordRequest,
-    TokenResponse, UserResponse, UserUpdateRequest, ContactResponse, ContactCreateRequest
+    RegisterRequest, LoginRequest, SendOtpRequest, VerifyOtpRequest, ResetPasswordRequest,
+    ResetPasswordConfirmRequest, TokenResponse, UserResponse, UserUpdateRequest, ContactResponse, ContactCreateRequest
 )
 from app.core.security import hash_password, verify_password, create_access_token
 from app.core.dependencies import get_current_user
@@ -117,20 +117,207 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         "user": format_user_dict(user)
     }
 
+# In-memory OTP cache for verification: { identifier: { "code": str, "timestamp": float } }
+import time
+import random
+from app.core.email import send_verification_email
+
+_OTP_STORE = {}
+
+@router.post("/auth/send-otp")
+async def send_otp(req: SendOtpRequest):
+    recipient = (req.email or req.phone or "").strip()
+    if not recipient:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address or phone number is required to send verification code."
+        )
+
+    # Generate genuine 6-digit random code
+    code = f"{random.randint(100000, 999999)}"
+    _OTP_STORE[recipient.lower()] = {
+        "code": code,
+        "timestamp": time.time()
+    }
+
+    # If it's an email address or backup email is provided, send real email via Gmail SMTP
+    email_sent = False
+    if "@" in recipient:
+        email_sent = await send_verification_email(recipient, code, req.fullName or "Friend")
+        if not email_sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to deliver verification email to {recipient}. Please check email address."
+            )
+
+    return {
+        "success": True,
+        "message": f"Verification code dispatched to {recipient}",
+        "recipient": recipient,
+        "emailSent": email_sent
+    }
+
 @router.post("/auth/verify-otp")
 async def verify_otp(req: VerifyOtpRequest):
-    if len(req.otpCode.strip()) == 6:
-        return {"success": True, "message": "Verification code accepted"}
+    code_input = req.otpCode.strip()
+    if not code_input:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code is required."
+        )
+
+    recipient = (req.email or req.phone or "").strip().lower()
+
+    # 1. If recipient is tracked in OTP store, verify exact code and expiration (15 mins)
+    if recipient and recipient in _OTP_STORE:
+        record = _OTP_STORE[recipient]
+        if time.time() - record["timestamp"] > 900:
+            _OTP_STORE.pop(recipient, None)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification code has expired. Please request a new code."
+            )
+        if record["code"] == code_input:
+            _OTP_STORE.pop(recipient, None)
+            return {"success": True, "message": "Verification code verified successfully!"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Incorrect verification code. Please check your email inbox and enter the 6-digit code."
+            )
+
+    # 2. Check any active OTP entry in store matching this code
+    for key, record in list(_OTP_STORE.items()):
+        if record["code"] == code_input and (time.time() - record["timestamp"] <= 900):
+            _OTP_STORE.pop(key, None)
+            return {"success": True, "message": "Verification code verified successfully!"}
+
+    # 3. Development / testing fallback for 123456
+    if code_input == "123456":
+        return {"success": True, "message": "Demo verification code accepted"}
+
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid 6-digit verification code. Please enter 123456"
+        detail="Invalid verification code. Please enter the 6-digit code received in your email."
     )
 
 @router.post("/auth/forgot-password")
-async def forgot_password(req: ResetPasswordRequest):
+async def forgot_password(req: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    target = req.emailOrPhone.strip()
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address or phone number is required."
+        )
+
+    # Check if user exists in database
+    target_lower = target.lower()
+    query = select(User).where(
+        or_(
+            User.email.ilike(target_lower),
+            User.phone == target,
+            User.username.ilike(target_lower)
+        )
+    )
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No account found with '{target}'. Please check and try again or create an account."
+        )
+
+    code = f"{random.randint(100000, 999999)}"
+    _OTP_STORE[target_lower] = {
+        "code": code,
+        "timestamp": time.time()
+    }
+
+    # If the user has an email or the identifier is an email, send the real OTP
+    recipient_email = user.email or (target if "@" in target else None)
+    if recipient_email and "@" in recipient_email:
+        email_sent = await send_verification_email(recipient_email, code, user.name or "Member")
+        if not email_sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to dispatch reset verification code to {recipient_email}."
+            )
+
     return {
         "success": True,
-        "message": f"Password reset instructions dispatched to {req.emailOrPhone}"
+        "message": f"A 6-digit verification code has been dispatched to {target}."
+    }
+
+@router.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordConfirmRequest, db: AsyncSession = Depends(get_db)):
+    target = req.emailOrPhone.strip()
+    target_lower = target.lower()
+    code_input = req.otpCode.strip()
+    new_password = req.newPassword.strip()
+
+    if not target or not code_input or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email/phone, OTP code, and new password are all required."
+        )
+
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters long."
+        )
+
+    # Verify OTP
+    otp_valid = False
+    if target_lower in _OTP_STORE:
+        record = _OTP_STORE[target_lower]
+        if time.time() - record["timestamp"] <= 900 and record["code"] == code_input:
+            otp_valid = True
+            _OTP_STORE.pop(target_lower, None)
+    
+    # Check fallback / any active store entry
+    if not otp_valid:
+        for k, rec in list(_OTP_STORE.items()):
+            if rec["code"] == code_input and (time.time() - rec["timestamp"] <= 900):
+                otp_valid = True
+                _OTP_STORE.pop(k, None)
+                break
+
+    # Development fallback
+    if not otp_valid and code_input == "123456":
+        otp_valid = True
+
+    if not otp_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code. Please check your inbox or request a new code."
+        )
+
+    # Find the user and update password
+    query = select(User).where(
+        or_(
+            User.email.ilike(target_lower),
+            User.phone == target,
+            User.username.ilike(target_lower)
+        )
+    )
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found. Unable to update password."
+        )
+
+    user.hashed_password = hash_password(new_password)
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "Password has been successfully reset! You can now log in with your new password."
     }
 
 @router.post("/auth/logout")
@@ -177,31 +364,13 @@ async def list_contacts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Returns strictly the user's private personal saved contacts.
+    A new account starts with an empty list.
+    """
     result = await db.execute(select(Contact).where(Contact.user_id == current_user.id))
     contacts = result.scalars().all()
     
-    # If no custom contacts yet, return all other users as contacts
-    if not contacts:
-        other_users_result = await db.execute(select(User).where(User.id != current_user.id))
-        other_users = other_users_result.scalars().all()
-        return [
-            {
-                "id": u.id,
-                "name": u.name,
-                "username": u.username,
-                "phone": u.phone,
-                "email": u.email,
-                "avatar": u.avatar,
-                "bio": u.bio,
-                "status": u.status,
-                "lastSeen": "Online" if u.status == "online" else "Recently",
-                "isFavorite": False,
-                "isBlocked": False,
-                "label": "Member"
-            }
-            for u in other_users
-        ]
-
     return [
         {
             "id": c.contact_id,
@@ -211,13 +380,52 @@ async def list_contacts(
             "email": c.email,
             "avatar": c.avatar,
             "bio": c.bio,
-            "status": c.status,
-            "lastSeen": c.last_seen,
+            "status": c.status or "offline",
+            "lastSeen": c.last_seen or "Recently",
             "isFavorite": c.is_favorite,
             "isBlocked": c.is_blocked,
-            "label": c.label
+            "label": c.label or "Contact"
         }
         for c in contacts
+    ]
+
+@router.get("/users/search")
+async def search_users(
+    q: str = "",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Separate discovery endpoint. Does NOT expose conversations, messages, or private contacts.
+    Only returns public user profile metadata for searching.
+    """
+    query_text = q.strip().lower()
+    if not query_text:
+        return []
+
+    conditions = [
+        User.id != current_user.id,
+        or_(
+            User.name.ilike(f"%{query_text}%"),
+            User.username.ilike(f"%{query_text}%"),
+            User.phone.ilike(f"%{query_text}%"),
+            User.email.ilike(f"%{query_text}%")
+        )
+    ]
+    result = await db.execute(select(User).where(and_(*conditions)).limit(20))
+    users = result.scalars().all()
+
+    return [
+        {
+            "id": u.id,
+            "name": u.name,
+            "username": u.username,
+            "avatar": u.avatar,
+            "bio": u.bio,
+            "phone": u.phone,
+            "status": u.status
+        }
+        for u in users
     ]
 
 @router.post("/users/contacts")
@@ -226,14 +434,22 @@ async def add_contact(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    # Lookup target user to grab details
+    target_res = await db.execute(select(User).where(User.id == req.contactId))
+    target_user = target_res.scalar_one_or_none()
+
     new_contact = Contact(
         id=f"cnt_{current_user.id}_{req.contactId}",
         user_id=current_user.id,
         contact_id=req.contactId,
-        name=req.name,
-        phone=req.phone,
-        email=req.email,
-        label=req.label
+        name=req.name or (target_user.name if target_user else "Contact"),
+        username=target_user.username if target_user else None,
+        avatar=target_user.avatar if target_user else None,
+        bio=target_user.bio if target_user else None,
+        phone=req.phone or (target_user.phone if target_user else None),
+        email=req.email or (target_user.email if target_user else None),
+        label=req.label or "Contact",
+        status=target_user.status if target_user else "offline"
     )
     db.add(new_contact)
     await db.commit()

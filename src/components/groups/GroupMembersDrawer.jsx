@@ -7,8 +7,11 @@ import { useGroupStore } from '../../stores/groupStore';
 import { useUiStore } from '../../stores/uiStore';
 import { ShieldCheck, UserMinus, UserPlus, LogOut } from 'lucide-react';
 
+import { useAuthStore } from '../../stores/authStore';
+
 export default function GroupMembersDrawer() {
   const { isMemberDrawerOpen, setMemberDrawerOpen, activeGroupId, groups, removeMember } = useGroupStore();
+  const { user } = useAuthStore();
   const { showToast } = useUiStore();
 
   const group = groups.find(g => g.id === activeGroupId);
@@ -20,9 +23,14 @@ export default function GroupMembersDrawer() {
   };
 
   const handleLeaveGroup = () => {
+    if (user?.id) {
+      removeMember(group.id, user.id);
+    }
     setMemberDrawerOpen(false);
     showToast(`You left ${group.name}`, "warning");
   };
+
+  const currentUserId = user?.id || 'user_me';
 
   return (
     <Modal
@@ -52,7 +60,7 @@ export default function GroupMembersDrawer() {
         <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
           {group.members?.map((member) => {
             const isAdmin = member.role === 'admin';
-            const isMe = member.id === 'user_me';
+            const isMe = member.id === currentUserId;
 
             return (
               <div

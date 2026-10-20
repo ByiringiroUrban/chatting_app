@@ -23,11 +23,24 @@ def format_group_dict(g: Group) -> dict:
         "settings": g.settings or {}
     }
 
+from app.models.conversation import Conversation, ConversationParticipant
+
 @router.get("", response_model=List[dict])
-async def list_groups(db: AsyncSession = Depends(get_db)):
+async def list_groups(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns only groups where current_user is a participant or creator.
+    """
     result = await db.execute(select(Group))
     groups = result.scalars().all()
-    return [format_group_dict(g) for g in groups]
+    # Filter groups where current_user is in members list
+    user_groups = [
+        format_group_dict(g) for g in groups
+        if any(m.get("id") == current_user.id for m in (g.members or []))
+    ]
+    return user_groups
 
 @router.post("", response_model=dict)
 async def create_group(
@@ -47,6 +60,7 @@ async def create_group(
         }
     ]
     
+    member_user_ids = [current_user.id]
     for uid in req.memberIds:
         if uid != current_user.id:
             user_res = await db.execute(select(User).where(User.id == uid))
@@ -58,6 +72,7 @@ async def create_group(
                     "role": "member",
                     "avatar": u.avatar
                 })
+                member_user_ids.append(u.id)
 
     new_group = Group(
         id=group_id,
@@ -71,8 +86,9 @@ async def create_group(
     db.add(new_group)
     
     # Also create matching Conversation so it shows in chats
+    conv_id = f"conv_{group_id}"
     new_conv = Conversation(
-        id=f"conv_{group_id}",
+        id=conv_id,
         type="group",
         group_id=group_id,
         name=req.name,
@@ -82,28 +98,52 @@ async def create_group(
     )
     db.add(new_conv)
 
+    # Insert ConversationParticipant for each group member
+    for mid in member_user_ids:
+        cp = ConversationParticipant(
+            id=f"cp_{conv_id}_{mid}",
+            conversation_id=conv_id,
+            user_id=mid,
+            role="admin" if mid == current_user.id else "member"
+        )
+        db.add(cp)
+
     await db.commit()
     await db.refresh(new_group)
     return format_group_dict(new_group)
 
 @router.get("/{group_id}", response_model=dict)
-async def get_group(group_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Group).where(Group.id == group_id))
-    group = result.scalar_one_or_none()
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
-    return format_group_dict(group)
-
-@router.post("/{group_id}/members")
-async def add_member(
+async def get_group(
     group_id: str,
-    user_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Group).where(Group.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+
+    # Authorize membership
+    if not any(m.get("id") == current_user.id for m in (group.members or [])):
+        raise HTTPException(status_code=403, detail="Access denied. You are not a member of this group.")
+
+    return format_group_dict(group)
+
+@router.post("/{group_id}/members")
+async def add_member(
+    group_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Group).where(Group.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    # Must be existing member (or admin) to add members
+    if not any(m.get("id") == current_user.id for m in (group.members or [])):
+        raise HTTPException(status_code=403, detail="Access denied. Only group members can invite others.")
 
     user_res = await db.execute(select(User).where(User.id == user_id))
     u = user_res.scalar_one_or_none()
@@ -119,6 +159,24 @@ async def add_member(
             "avatar": u.avatar
         })
         group.members = members
+
+        # Also add ConversationParticipant
+        conv_id = f"conv_{group_id}"
+        cp_check = await db.execute(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conv_id,
+                ConversationParticipant.user_id == u.id
+            )
+        )
+        if not cp_check.scalar_one_or_none():
+            cp = ConversationParticipant(
+                id=f"cp_{conv_id}_{u.id}",
+                conversation_id=conv_id,
+                user_id=u.id,
+                role="member"
+            )
+            db.add(cp)
+
         await db.commit()
 
     return {"success": True, "members": group.members}
@@ -127,6 +185,7 @@ async def add_member(
 async def remove_member(
     group_id: str,
     user_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Group).where(Group.id == group_id))
@@ -134,7 +193,26 @@ async def remove_member(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
+    # Only self-removal (leave group) or admin can remove members
+    is_self = (user_id == current_user.id)
+    is_admin = any(m.get("id") == current_user.id and m.get("role") == "admin" for m in (group.members or []))
+    if not (is_self or is_admin):
+        raise HTTPException(status_code=403, detail="Forbidden. Only group admins or the member themselves can perform this action.")
+
     members = [m for m in (group.members or []) if m.get("id") != user_id]
     group.members = members
+
+    # Remove ConversationParticipant
+    conv_id = f"conv_{group_id}"
+    cp_res = await db.execute(
+        select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == conv_id,
+            ConversationParticipant.user_id == user_id
+        )
+    )
+    cp = cp_res.scalar_one_or_none()
+    if cp:
+        await db.delete(cp)
+
     await db.commit()
     return {"success": True, "members": group.members}

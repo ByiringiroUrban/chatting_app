@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { currentUser } from '../data/mockUsers';
 import { authApi } from '../services/api';
 import { wsService } from '../services/websocket';
 import { useChatStore } from './chatStore';
@@ -8,18 +7,20 @@ const STORAGE_KEY = 'muraho_auth_user';
 const TOKEN_KEY = 'muraho_access_token';
 const LOGGED_OUT_KEY = 'muraho_logged_out';
 
-// Determine initial auth state
+// Determine initial auth state: ONLY restore if a valid token and user exist in storage
 const isExplicitlyLoggedOut = localStorage.getItem(LOGGED_OUT_KEY) === 'true';
 const savedUserRaw = localStorage.getItem(STORAGE_KEY);
+const savedToken = localStorage.getItem(TOKEN_KEY);
 let initialUser = null;
-if (!isExplicitlyLoggedOut) {
+
+if (!isExplicitlyLoggedOut && savedToken && savedUserRaw) {
   try {
-    initialUser = savedUserRaw ? JSON.parse(savedUserRaw) : currentUser;
+    initialUser = JSON.parse(savedUserRaw);
   } catch (e) {
-    initialUser = currentUser;
+    initialUser = null;
   }
 }
-const initialAuth = !isExplicitlyLoggedOut && initialUser !== null;
+const initialAuth = !isExplicitlyLoggedOut && initialUser !== null && Boolean(savedToken);
 
 export const useAuthStore = create((set, get) => ({
   user: initialUser,
@@ -34,38 +35,35 @@ export const useAuthStore = create((set, get) => ({
   login: async ({ emailOrPhone, password, rememberMe }) => {
     set({ isLoading: true, error: null });
     
-    // Simulate auth check or connect to backend
-    if (!emailOrPhone || !password) {
-      set({ isLoading: false, error: "Please enter your credentials." });
+    if (!emailOrPhone?.trim() || !password) {
+      set({ isLoading: false, error: "Please enter your email/phone and password." });
       return false;
     }
 
-    let updatedUser = {
-      ...currentUser,
-      email: emailOrPhone.includes('@') ? emailOrPhone : currentUser.email,
-      phone: !emailOrPhone.includes('@') ? emailOrPhone : currentUser.phone
-    };
-
     try {
-      const response = await authApi.login({ emailOrPhone, password, rememberMe });
-      if (response?.access_token) {
-        localStorage.setItem(TOKEN_KEY, response.access_token);
-      }
-      if (response?.user) {
-        updatedUser = { ...currentUser, ...response.user };
-      }
-    } catch (e) {
-      console.warn("[Muraho Auth] Backend API login offline/fallback, using local session:", e.message);
-      await new Promise((resolve) => setTimeout(resolve, 600));
-    }
+      const response = await authApi.login({ 
+        emailOrPhone: emailOrPhone.trim(), 
+        password, 
+        rememberMe 
+      });
 
-    localStorage.removeItem(LOGGED_OUT_KEY);
-    if (rememberMe) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+      if (!response?.access_token || !response?.user) {
+        throw new Error("Invalid response from server");
+      }
+
+      localStorage.setItem(TOKEN_KEY, response.access_token);
+      localStorage.removeItem(LOGGED_OUT_KEY);
+      
+      const authenticatedUser = response.user;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedUser));
+      
+      set({ user: authenticatedUser, isAuthenticated: true, isLoading: false, error: null });
+      return true;
+    } catch (e) {
+      const errorMsg = e.message || "Invalid credentials or account does not exist.";
+      set({ isLoading: false, error: errorMsg });
+      return false;
     }
-    
-    set({ user: updatedUser, isAuthenticated: true, isLoading: false, error: null });
-    return true;
   },
 
   register: async ({ fullName, username, email, phone, password, avatar, bio }) => {
@@ -76,67 +74,85 @@ export const useAuthStore = create((set, get) => ({
     const cleanName = fullName?.trim() || (cleanEmail ? cleanEmail.split('@')[0] : "New User");
     const cleanUsername = username?.trim() || (cleanName.toLowerCase().replace(/\s+/g, '_') + '_' + Math.floor(Math.random() * 1000));
 
-    let newUser = {
-      ...currentUser,
-      id: `user_${Date.now()}`,
-      name: cleanName,
-      username: cleanUsername,
-      email: cleanEmail || (cleanPhone ? `${cleanPhone.replace(/\s+/g, '').replace('+', '')}@phone.muraho.rw` : "user@muraho.rw"),
-      phone: cleanPhone || "+250 788 000 000",
-      avatar: avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-      bio: bio || "Hey there! I am using Muraho.",
-      status: "online",
-      role: "user",
-      isBusiness: false,
-      joinedDate: "Today"
-    };
-
     try {
       const response = await authApi.register({
-        fullName: newUser.name,
-        username: newUser.username,
+        fullName: cleanName,
+        username: cleanUsername,
         email: cleanEmail,
         phone: cleanPhone,
         password: password || "password123",
-        avatar: newUser.avatar,
-        bio: newUser.bio
+        avatar: avatar || null,
+        bio: bio || "Hey there! I am using Muraho."
       });
 
-      if (response?.access_token) {
-        localStorage.setItem(TOKEN_KEY, response.access_token);
+      if (!response?.access_token || !response?.user) {
+        throw new Error("Registration failed: Invalid response from server");
       }
-      if (response?.user) {
-        newUser = { ...newUser, ...response.user };
-      }
-    } catch (e) {
-      console.warn("[Muraho Auth] Backend API registration fallback to local state:", e.message);
-      await new Promise((resolve) => setTimeout(resolve, 700));
-    }
 
-    localStorage.removeItem(LOGGED_OUT_KEY);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
-    set({ user: newUser, isAuthenticated: true, isLoading: false, error: null });
-    return true;
+      localStorage.setItem(TOKEN_KEY, response.access_token);
+      localStorage.removeItem(LOGGED_OUT_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));
+      
+      set({ user: response.user, isAuthenticated: true, isLoading: false, error: null });
+      return true;
+    } catch (e) {
+      console.error("[Muraho Auth] Backend registration error:", e.message);
+      const msg = e.message || "Registration failed. An account with this phone/email may already exist.";
+      set({ isLoading: false, error: msg });
+      return false;
+    }
   },
 
-  verifyOtp: async (otpCode) => {
+  sendOtp: async ({ email, phone, fullName }) => {
     set({ isLoading: true, error: null });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    try {
+      const res = await authApi.sendOtp({ email, phone, fullName });
+      set({ isLoading: false });
+      return { success: true, message: res.message, emailSent: res.emailSent };
+    } catch (e) {
+      const msg = e.message || "Failed to dispatch verification code";
+      set({ isLoading: false, error: msg });
+      return { success: false, error: msg };
+    }
+  },
 
-    if (otpCode.length === 6) {
+  verifyOtp: async (otpCode, emailOrPhone = null) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await authApi.verifyOtp(otpCode, emailOrPhone);
       set({ isLoading: false, error: null });
       return true;
-    } else {
-      set({ isLoading: false, error: "Invalid 6-digit code. Please try 123456" });
+    } catch (e) {
+      const msg = e.message || "Invalid 6-digit verification code.";
+      set({ isLoading: false, error: msg });
       return false;
     }
   },
 
   resetPassword: async (emailOrPhone) => {
     set({ isLoading: true, error: null });
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    set({ isLoading: false });
-    return true;
+    try {
+      const res = await authApi.forgotPassword(emailOrPhone);
+      set({ isLoading: false });
+      return { success: true, message: res.message };
+    } catch (e) {
+      const msg = e.message || "Failed to send reset code. Please check your email or phone number.";
+      set({ isLoading: false, error: msg });
+      return { success: false, error: msg };
+    }
+  },
+
+  confirmPasswordReset: async ({ emailOrPhone, otpCode, newPassword }) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await authApi.resetPasswordConfirm({ emailOrPhone, otpCode, newPassword });
+      set({ isLoading: false, error: null });
+      return { success: true, message: res.message };
+    } catch (e) {
+      const msg = e.message || "Failed to reset password. Please check your OTP code.";
+      set({ isLoading: false, error: msg });
+      return { success: false, error: msg };
+    }
   },
 
   updateProfile: (updatedFields) => {
@@ -159,15 +175,34 @@ export const useAuthStore = create((set, get) => ({
     // 1. Disconnect active WebSocket connection
     wsService.disconnect();
 
-    // 2. Reset active chat / call states
+    // 2. Reset active chat, contact, group, and call states
     try {
       useChatStore.getState().resetChatState();
     } catch (e) {}
+    try {
+      const { useContactStore } = await import('./contactStore');
+      useContactStore.getState().resetContactsState();
+    } catch (e) {}
+    try {
+      const { useGroupStore } = await import('./groupStore');
+      useGroupStore.getState().resetGroupsState();
+    } catch (e) {}
 
-    // 3. Clear local storage authentication and set logged_out sentinel
+    // 3. Clear local storage authentication and sensitive cached keys
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.setItem(LOGGED_OUT_KEY, 'true');
+    // Clear all legacy and scoped keys
+    Object.keys(localStorage).forEach((key) => {
+      if (
+        key.startsWith('muraho_convs_') ||
+        key.startsWith('muraho_msgs_') ||
+        key.startsWith('muraho_contacts_') ||
+        key.startsWith('muraho_groups_')
+      ) {
+        localStorage.removeItem(key);
+      }
+    });
     sessionStorage.clear();
 
     // 4. Update store state

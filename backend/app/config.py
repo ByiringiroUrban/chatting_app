@@ -31,7 +31,20 @@ class Settings(BaseSettings):
     # Seed
     AUTO_SEED: bool = True
     
-    # Media upload directory
+    # SMTP Email Verification
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = "urbanpac20@gmail.com"
+    SMTP_PASSWORD: str = "lred cuyt impl nahe"
+    SMTP_FROM_EMAIL: str = "urbanpac20@gmail.com"
+    SMTP_FROM_NAME: str = "Muraho Rwanda"
+
+    # Cloudinary Cloud Storage
+    CLOUDINARY_CLOUD_NAME: str = "dyp92boyd"
+    CLOUDINARY_API_KEY: str = "226153131222776"
+    CLOUDINARY_API_SECRET: str = "aZyk6ueTAQY79YA8MZrpLrgh2b0"
+
+    # Media upload directory (local fallback / temp storage)
     UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
 
     @property

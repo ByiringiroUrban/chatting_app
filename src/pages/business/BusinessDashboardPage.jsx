@@ -22,13 +22,31 @@ import {
 } from 'recharts';
 
 export default function BusinessDashboardPage() {
-  const { profile, analytics, customerInbox, products } = useBusinessStore();
+  const { profile, analytics, customerInbox, products, fetchBusinessData, isLoading } = useBusinessStore();
+
+  React.useEffect(() => {
+    fetchBusinessData();
+  }, []);
+
+  const businessName = profile?.name || "Business Suite";
+  const defaultAnalytics = {
+    overview: {
+      totalMessages: 0,
+      activeConversations: 0,
+      responseRate: 100,
+      averageResponseTime: "1m"
+    },
+    dailyActivity: [],
+    hourlyDistribution: []
+  };
+
+  const safeAnalytics = analytics || defaultAnalytics;
 
   const metrics = [
-    { label: "Total Messages", value: analytics.overview.totalMessages?.toLocaleString(), change: "+14.2%", icon: MessageSquare, color: "text-brand-600 bg-teal-50 dark:bg-brand-950/60" },
-    { label: "Active Inquiries", value: analytics.overview.activeConversations, change: "+8.5%", icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-950/60" },
-    { label: "Response Rate", value: `${analytics.overview.responseRate}%`, change: "+1.2%", icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60" },
-    { label: "Avg Response Time", value: analytics.overview.averageResponseTime, change: "-18%", icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-950/60" },
+    { label: "Total Messages", value: safeAnalytics.overview?.totalMessages?.toLocaleString() || "0", change: "+14.2%", icon: MessageSquare, color: "text-brand-600 bg-teal-50 dark:bg-brand-950/60" },
+    { label: "Active Inquiries", value: safeAnalytics.overview?.activeConversations || 0, change: "+8.5%", icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-950/60" },
+    { label: "Response Rate", value: `${safeAnalytics.overview?.responseRate || 100}%`, change: "+1.2%", icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60" },
+    { label: "Avg Response Time", value: safeAnalytics.overview?.averageResponseTime || "1m", change: "-18%", icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-950/60" },
   ];
 
   return (
@@ -42,7 +60,7 @@ export default function BusinessDashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100">
-                {profile.name}
+                {businessName}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
                 Real-time commerce inbox, customer engagement, and analytics in Rwanda.
@@ -100,7 +118,7 @@ export default function BusinessDashboardPage() {
 
               <div className="h-56 sm:h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.dailyActivity}>
+                  <AreaChart data={safeAnalytics.dailyActivity || []}>
                     <defs>
                       <linearGradient id="msgGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#0F766E" stopOpacity={0.3}/>
@@ -124,7 +142,7 @@ export default function BusinessDashboardPage() {
 
               <div className="h-56 sm:h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.hourlyDistribution}>
+                  <BarChart data={safeAnalytics.hourlyDistribution || []}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                     <XAxis dataKey="hour" stroke="#94A3B8" fontSize={9} />
                     <YAxis stroke="#94A3B8" fontSize={9} />

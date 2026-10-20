@@ -30,15 +30,35 @@ async function request(endpoint, options = {}) {
 export const authApi = {
   login: (credentials) => request("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
   register: (data) => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
-  verifyOtp: (otpCode) => request("/auth/verify-otp", { method: "POST", body: JSON.stringify({ otpCode }) }),
+  sendOtp: (data) => request("/auth/send-otp", { method: "POST", body: JSON.stringify(data) }),
+  verifyOtp: (otpCode, emailOrPhone = null) =>
+    request("/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({
+        otpCode,
+        ...(emailOrPhone && emailOrPhone.includes('@') ? { email: emailOrPhone } : { phone: emailOrPhone })
+      })
+    }),
   getMe: () => request("/users/me"),
   updateMe: (data) => request("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
   getContacts: () => request("/users/contacts"),
+  searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(q)}`),
+  forgotPassword: (emailOrPhone) =>
+    request("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ emailOrPhone })
+    }),
+  resetPasswordConfirm: ({ emailOrPhone, otpCode, newPassword }) =>
+    request("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ emailOrPhone, otpCode, newPassword })
+    }),
   logout: () => request("/auth/logout", { method: "POST" })
 };
 
 export const chatApi = {
   getConversations: () => request("/conversations"),
+  createConversation: (data) => request("/conversations", { method: "POST", body: JSON.stringify(data) }),
   getMessages: (conversationId) => request(`/conversations/${conversationId}/messages`),
   sendMessage: (conversationId, messageData) =>
     request(`/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify(messageData) }),
@@ -103,6 +123,11 @@ export const subscriptionApi = {
   getPlans: () => request("/subscriptions/plans"),
   checkout: (checkoutData) => request("/subscriptions/checkout", { method: "POST", body: JSON.stringify(checkoutData) }),
   getHistory: () => request("/subscriptions/history")
+};
+
+export const adApi = {
+  getCampaigns: () => request("/ads"),
+  createCampaign: (data) => request("/ads", { method: "POST", body: JSON.stringify(data) })
 };
 
 export const uploadApi = {

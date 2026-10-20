@@ -68,10 +68,48 @@ export default function App() {
       setInboundReaction(data);
     });
 
+    // 4. Message status updates (sent -> delivered -> read)
+    const unsubStatus = wsService.on("chat.message_status", (data) => {
+      useChatStore.getState().updateMessageStatus(data);
+    });
+
+    // 5. Message edited by other user
+    const unsubEdited = wsService.on("chat.message_edited", (data) => {
+      useChatStore.getState().handleInboundMessageEdited(data);
+    });
+
+    // 6. Message deleted by other user
+    const unsubDeleted = wsService.on("chat.message_deleted", (data) => {
+      useChatStore.getState().handleInboundMessageDeleted(data);
+    });
+
+    // 7. User presence (online/offline/last seen)
+    const unsubPresence = wsService.on("user.presence", (data) => {
+      useChatStore.getState().updateUserPresence(data);
+    });
+
+    // 8. Reconnection recovery — resync missed messages
+    const unsubReconnect = wsService.on("status", (data) => {
+      if (data.connected) {
+        // Re-join active conversation room and resync
+        const activeId = useChatStore.getState().activeChatId;
+        if (activeId) {
+          wsService.joinConversation(activeId);
+          wsService.send("chat.read", { conversationId: activeId });
+        }
+        useChatStore.getState().resyncAfterReconnect();
+      }
+    });
+
     return () => {
       unsubMsg();
       unsubTyping();
       unsubReaction();
+      unsubStatus();
+      unsubEdited();
+      unsubDeleted();
+      unsubPresence();
+      unsubReconnect();
       wsService.disconnect();
     };
   }, [isAuthenticated, user?.id]);

@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User, Contact
-from app.models.conversation import Conversation
+from app.models.conversation import Conversation, ConversationParticipant
 from app.models.message import Message
 from app.models.group import Group
 from app.models.status import StatusStory
@@ -299,6 +299,34 @@ async def seed_all_data(db: AsyncSession):
     ]
     for cv in convs_data:
         db.add(cv)
+
+    # Conversation participants linking
+    participants_seed = [
+        # conv_1: Jean-Luc (user_me) & Aline (user_1)
+        ConversationParticipant(id="cp_1_me", conversation_id="conv_1", user_id="user_me", role="member"),
+        ConversationParticipant(id="cp_1_u1", conversation_id="conv_1", user_id="user_1", role="member"),
+        # conv_2: Group 1 (Software Developers Rwanda)
+        ConversationParticipant(id="cp_2_me", conversation_id="conv_2", user_id="user_me", role="admin"),
+        ConversationParticipant(id="cp_2_u1", conversation_id="conv_2", user_id="user_1", role="admin"),
+        ConversationParticipant(id="cp_2_u2", conversation_id="conv_2", user_id="user_2", role="member"),
+        ConversationParticipant(id="cp_2_u4", conversation_id="conv_2", user_id="user_4", role="member"),
+        ConversationParticipant(id="cp_2_u6", conversation_id="conv_2", user_id="user_6", role="member"),
+        # conv_3: Jean-Luc (user_me) & David (user_2)
+        ConversationParticipant(id="cp_3_me", conversation_id="conv_3", user_id="user_me", role="member"),
+        ConversationParticipant(id="cp_3_u2", conversation_id="conv_3", user_id="user_2", role="member"),
+        # conv_4: Group 2 (AI & Machine Learning Rwanda)
+        ConversationParticipant(id="cp_4_u6", conversation_id="conv_4", user_id="user_6", role="admin"),
+        ConversationParticipant(id="cp_4_me", conversation_id="conv_4", user_id="user_me", role="member"),
+        ConversationParticipant(id="cp_4_u4", conversation_id="conv_4", user_id="user_4", role="member"),
+        # conv_5: Jean-Luc (user_me) & Diane (user_3)
+        ConversationParticipant(id="cp_5_me", conversation_id="conv_5", user_id="user_me", role="member"),
+        ConversationParticipant(id="cp_5_u3", conversation_id="conv_5", user_id="user_3", role="member"),
+        # conv_6: Jean-Luc (user_me) & Sonia (user_5)
+        ConversationParticipant(id="cp_6_me", conversation_id="conv_6", user_id="user_me", role="member"),
+        ConversationParticipant(id="cp_6_u5", conversation_id="conv_6", user_id="user_5", role="member"),
+    ]
+    for cp in participants_seed:
+        db.add(cp)
 
     # 4. Messages
     msgs_data = [

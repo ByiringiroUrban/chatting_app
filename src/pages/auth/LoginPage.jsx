@@ -5,10 +5,11 @@ import Button from '../../components/common/Button';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import ThemeToggle from '../../components/common/ThemeToggle';
 
 export default function LoginPage() {
-  const [emailOrPhone, setEmailOrPhone] = useState('jeanluc@muraho.rw');
-  const [password, setPassword] = useState('password123');
+  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
@@ -18,6 +19,10 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!emailOrPhone.trim() || !password) {
+      showToast("Please enter your email or phone and password", "warning");
+      return;
+    }
     const success = await login({ emailOrPhone, password, rememberMe });
     if (success) {
       showToast("Welcome back to Muraho!", "success");
@@ -26,7 +31,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-bg-light dark:bg-bg-dark selection:bg-brand-500 selection:text-white">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-bg-light dark:bg-bg-dark selection:bg-brand-500 selection:text-white relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xl">
         
         {/* Brand Header */}
@@ -40,12 +48,6 @@ export default function LoginPage() {
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Connect, chat, and manage your Rwandan business effortlessly.
           </p>
-        </div>
-
-        {/* Demo Notice Banner */}
-        <div className="mb-6 p-3 rounded-2xl bg-teal-50 dark:bg-brand-950/40 border border-teal-200 dark:border-brand-800/40 text-[11px] text-teal-800 dark:text-teal-300 flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-          <span>Demo Authentication mode is active. Click <b>Log In</b> to explore all features instantly.</span>
         </div>
 
         {/* Login Form */}

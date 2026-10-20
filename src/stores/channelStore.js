@@ -1,16 +1,17 @@
 import { create } from 'zustand';
-import { mockChannels } from '../data/mockChannels';
+import { channelApi } from '../services/api';
 
 const CHANNELS_STORAGE = 'muraho_channels';
 
 export const useChannelStore = create((set, get) => ({
-  channels: JSON.parse(localStorage.getItem(CHANNELS_STORAGE)) || mockChannels,
-  activeChannelId: "channel_1",
+  channels: JSON.parse(localStorage.getItem(CHANNELS_STORAGE)) || [],
+  activeChannelId: null,
   categoryFilter: "All",
   searchQuery: "",
   isCreateModalOpen: false,
   isSubscriptionModalOpen: false,
   selectedChannelForSub: null,
+  isLoading: false,
 
   setActiveChannelId: (id) => set({ activeChannelId: id }),
   setCategoryFilter: (cat) => set({ categoryFilter: cat }),
@@ -19,14 +20,47 @@ export const useChannelStore = create((set, get) => ({
   setSubscriptionModalOpen: (open, channel = null) =>
     set({ isSubscriptionModalOpen: open, selectedChannelForSub: channel }),
 
-  toggleSubscribe: (channelId) => {
+  fetchChannels: async (category) => {
+    set({ isLoading: true });
+    try {
+      const data = await channelApi.getChannels(category);
+      if (Array.isArray(data)) {
+        set({ 
+          channels: data, 
+          isLoading: false,
+          activeChannelId: get().activeChannelId || (data[0]?.id || null)
+        });
+        localStorage.setItem(CHANNELS_STORAGE, JSON.stringify(data));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch channels from DB:", err.message);
+      set({ isLoading: false });
+    }
+  },
+
+  toggleSubscribe: async (channelId) => {
     const channel = get().channels.find(c => c.id === channelId);
     if (!channel) return;
 
     if (channel.isPremium && !channel.isSubscribed) {
-      // Open subscription checkout modal for premium channels
       set({ isSubscriptionModalOpen: true, selectedChannelForSub: channel });
       return;
+    }
+
+    try {
+      const res = await channelApi.subscribeChannel(channelId);
+      if (res) {
+        set((state) => {
+          const updated = state.channels.map(c =>
+            c.id === channelId ? { ...c, isSubscribed: res.isSubscribed, subscribers: res.subscribers } : c
+          );
+          localStorage.setItem(CHANNELS_STORAGE, JSON.stringify(updated));
+          return { channels: updated };
+        });
+        return;
+      }
+    } catch (e) {
+      // fallback local update
     }
 
     set((state) => {

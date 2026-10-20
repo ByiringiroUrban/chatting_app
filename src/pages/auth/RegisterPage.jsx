@@ -26,6 +26,7 @@ import { countryCodes, defaultCountry } from '../../data/countryCodes';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 import LanguageSelector from '../../components/common/LanguageSelector';
+import ThemeToggle from '../../components/common/ThemeToggle';
 
 const PRESET_AVATARS = [
   { id: 'av1', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80', label: 'Keza' },
@@ -48,7 +49,7 @@ const WHATSAPP_STATUS_PRESETS = [
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { register, verifyOtp, isLoading, error } = useAuthStore();
+  const { register, sendOtp, verifyOtp, isLoading, error } = useAuthStore();
   const { showToast } = useUiStore();
 
   // Registration Stepper: 'welcome' | 'identifier' | 'verify' | 'profile' | 'initializing'
@@ -87,8 +88,8 @@ export default function RegisterPage() {
   const [customAvatarPreview, setCustomAvatarPreview] = useState(null);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [bio, setBio] = useState('Hey there! I am using Muraho.');
-  const [password, setPassword] = useState('password123');
-  const [confirmPassword, setConfirmPassword] = useState('password123');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Initializing state
@@ -155,14 +156,30 @@ export default function RegisterPage() {
   };
 
   // When user clicks "OK" in confirmation modal
-  const handleConfirmNumber = () => {
+  const handleConfirmNumber = async () => {
     setShowConfirmModal(false);
     setStep('verify');
-    setCountdown(45);
+    setCountdown(60);
     setOtp(['', '', '', '', '', '']);
 
     const targetDesc = authMethod === 'phone' ? getFullPhone() : email;
-    showToast(`Verification code sent to ${targetDesc}`, 'info');
+    const targetEmail = authMethod === 'email' ? email : (includeEmailBackup ? backupEmail : null);
+    const targetPhone = authMethod === 'phone' ? getFullPhone() : (includePhoneBackup ? backupPhone : null);
+
+    showToast(`Sending verification code to ${targetDesc}...`, 'info');
+
+    // Trigger real backend email/sms OTP dispatch
+    const result = await sendOtp({
+      email: targetEmail,
+      phone: targetPhone,
+      fullName: 'Friend'
+    });
+
+    if (result?.emailSent) {
+      showToast(`Verification code sent to ${targetEmail}! Please check your inbox.`, 'success');
+    } else {
+      showToast(`Verification code dispatched to ${targetDesc}`, 'info');
+    }
 
     // Auto-focus first digit on OTP screen
     setTimeout(() => {
@@ -219,7 +236,8 @@ export default function RegisterPage() {
       return;
     }
 
-    const verified = await verifyOtp(code);
+    const target = authMethod === 'email' ? email : (includeEmailBackup && backupEmail ? backupEmail : getFullPhone());
+    const verified = await verifyOtp(code, target);
     if (verified) {
       showToast('Verification successful!', 'success');
       setStep('profile');
@@ -232,10 +250,24 @@ export default function RegisterPage() {
     handleVerifyOtpCode('123456');
   };
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
     setCountdown(60);
     const targetDesc = authMethod === 'phone' ? getFullPhone() : email;
-    showToast(`New 6-digit security code sent to ${targetDesc}`, 'info');
+    const targetEmail = authMethod === 'email' ? email : (includeEmailBackup ? backupEmail : null);
+    const targetPhone = authMethod === 'phone' ? getFullPhone() : (includePhoneBackup ? backupPhone : null);
+    showToast(`Sending new security code to ${targetDesc}...`, 'info');
+
+    const res = await sendOtp({
+      email: targetEmail,
+      phone: targetPhone,
+      fullName: 'Friend'
+    });
+
+    if (res?.emailSent) {
+      showToast(`New verification code delivered to ${targetEmail}!`, 'success');
+    } else {
+      showToast(`New 6-digit security code sent to ${targetDesc}`, 'info');
+    }
   };
 
   // ---------------------------------------------------------------
@@ -302,7 +334,7 @@ export default function RegisterPage() {
         username: username.trim() || fullName.trim().toLowerCase().replace(/\s+/g, '_'),
         email: finalEmail,
         phone: finalPhone,
-        password: password || 'password123',
+        password: password,
         avatar: selectedAvatar,
         bio: bio.trim() || 'Hey there! I am using Muraho.',
       });
@@ -338,8 +370,9 @@ export default function RegisterPage() {
         {/* ========================================================================= */}
         {step === 'welcome' && (
           <div className="p-8 sm:p-10 flex flex-col items-center text-center animate-fade-in">
-            {/* Top Language Selector */}
-            <div className="w-full flex justify-end mb-4">
+            {/* Top Language & Theme Selectors */}
+            <div className="w-full flex items-center justify-between mb-4">
+              <ThemeToggle />
               <LanguageSelector className="bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm" />
             </div>
 

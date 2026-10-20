@@ -8,9 +8,13 @@ import { useUiStore } from '../../stores/uiStore';
 import { Plus, Edit2, Trash2, ShoppingBag, Send } from 'lucide-react';
 
 export default function BusinessCatalogPage() {
-  const { products, setProductModalOpen, deleteProduct } = useBusinessStore();
+  const { products, setProductModalOpen, deleteProduct, fetchBusinessData, isLoading } = useBusinessStore();
   const { showToast } = useUiStore();
   const [categoryFilter, setCategoryFilter] = useState('All');
+
+  React.useEffect(() => {
+    fetchBusinessData();
+  }, []);
 
   const categories = ["All", "Food & Beverage", "Handicrafts & Art", "Digital Services", "Events & Tickets", "Accessories"];
 
