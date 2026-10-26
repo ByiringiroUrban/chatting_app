@@ -892,6 +892,7 @@ export default function RegisterPage() {
                         <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
                         <input
                           type={showPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
@@ -916,6 +917,7 @@ export default function RegisterPage() {
                         <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
                         <input
                           type={showPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           placeholder="••••••••"
