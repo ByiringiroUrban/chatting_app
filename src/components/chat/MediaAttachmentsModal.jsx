@@ -5,7 +5,7 @@ import Input from '../common/Input';
 import { Image, FileText, Film, Upload, X, File, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 import { useUiStore } from '../../stores/uiStore';
-import { uploadApi } from '../../services/api';
+import { resolveBackendUrl, uploadApi } from '../../services/api';
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 const ALLOWED_IMAGE = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -117,7 +117,7 @@ export default function MediaAttachmentsModal({ isOpen, onClose }) {
         setUploadProgress(prev => ({ ...prev, [i]: 100 }));
 
         const rawUrl = result.url || '';
-        const mediaUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`;
+        const mediaUrl = resolveBackendUrl(rawUrl);
 
         sendMessage({
           type,

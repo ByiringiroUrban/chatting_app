@@ -22,6 +22,7 @@ import {
 import Dropdown from '../common/Dropdown';
 import { useChatStore } from '../../stores/chatStore';
 import { useUiStore } from '../../stores/uiStore';
+import { resolveBackendUrl } from '../../services/api';
 
 export default function MessageBubble({ message, isGroup = false }) {
   const { 
@@ -129,8 +130,7 @@ export default function MessageBubble({ message, isGroup = false }) {
   // Resolve media URL for backend-hosted files
   const resolveUrl = (url) => {
     if (!url) return '';
-    if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
-    return `http://localhost:8000${url}`;
+    return resolveBackendUrl(url);
   };
 
   return (

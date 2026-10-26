@@ -104,3 +104,60 @@ async def test_account_isolation_and_authorization(setup_test_users):
         conv_ids = [c["id"] for c in res_c_list.json()]
         assert conv_ids == [conv_ac_id], "User C must only see their conversation with A"
         assert conv_ab_id not in conv_ids, "User C must never see A and B's conversation"
+
+        # 12. Selecting/creating conversation with B again reuses existing conversation (deduplication)
+        res_ab_dupe = await ac.post("/api/v1/conversations", headers=headers_a, json={
+            "type": "direct",
+            "participantId": uid_b,
+            "name": "Bob B"
+        })
+        assert res_ab_dupe.status_code == 200
+        assert res_ab_dupe.json()["id"] == conv_ab_id, "Re-creating direct conversation must return existing conversation ID"
+
+        # Also from B to A simultaneously
+        res_ba_dupe = await ac.post("/api/v1/conversations", headers=headers_b, json={
+            "type": "direct",
+            "participantId": uid_a,
+            "name": "Alice A"
+        })
+        assert res_ba_dupe.status_code == 200
+        assert res_ba_dupe.json()["id"] == conv_ab_id, "B contacting A must resolve to the identical conversation ID"
+
+        # 13. Contacts isolation: A saves B with a private nickname
+        res_add_contact = await ac.post("/api/v1/users/contacts", headers=headers_a, json={
+            "contactId": uid_b,
+            "name": "My Best Buddy Bob",
+            "label": "VIP Partner"
+        })
+        assert res_add_contact.status_code == 200
+
+        # A sees Bob in contacts with private nickname
+        res_a_contacts = await ac.get("/api/v1/users/contacts", headers=headers_a)
+        assert res_a_contacts.status_code == 200
+        assert any(c["id"] == uid_b and c["name"] == "My Best Buddy Bob" for c in res_a_contacts.json())
+
+        # C's contacts must remain 0 (contacts are not shared across accounts)
+        res_c_contacts = await ac.get("/api/v1/users/contacts", headers=headers_c)
+        assert res_c_contacts.status_code == 200
+        assert len(res_c_contacts.json()) == 0, "User C must not see User A's private contacts"
+
+        # 14. Discovery search: search finds public profile without exposing conversations
+        res_search = await ac.get(f"/api/v1/users/search?q={uid_b}", headers=headers_c)
+        assert res_search.status_code == 200
+        search_data = res_search.json()
+        assert any(u["id"] == uid_b for u in search_data)
+        for u in search_data:
+            assert "messages" not in u
+            assert "conversations" not in u
+
+        # 15. Blocking: A blocks B, message sending is rejected
+        res_block = await ac.patch(f"/api/v1/users/contacts/{uid_b}", headers=headers_a, json={
+            "isBlocked": True
+        })
+        assert res_block.status_code == 200
+
+        res_send_blocked = await ac.post(f"/api/v1/conversations/{conv_ab_id}/messages", headers=headers_b, json={
+            "text": "Blocked attempt",
+            "type": "text"
+        })
+        assert res_send_blocked.status_code == 403, "Sending message to/from a blocked contact must return 403"

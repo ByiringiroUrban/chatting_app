@@ -377,6 +377,28 @@ async def send_message(
     # Strict membership check: Only participants can send messages
     conv, _ = await verify_conversation_participant(conversation_id, current_user.id, db)
 
+    # Enforce existing blocking rules for direct conversations
+    if conv.type == "direct":
+        # Check if recipient blocked sender or sender blocked recipient
+        part_result = await db.execute(
+            select(ConversationParticipant.user_id)
+            .where(ConversationParticipant.conversation_id == conversation_id, ConversationParticipant.user_id != current_user.id)
+        )
+        recipient_id = part_result.scalar_one_or_none() or conv.participant_id
+        if recipient_id:
+            # Check if contact is blocked
+            from app.models.user import Contact
+            block_check = await db.execute(
+                select(Contact).where(
+                    or_(
+                        and_(Contact.user_id == recipient_id, Contact.contact_id == current_user.id, Contact.is_blocked == True),
+                        and_(Contact.user_id == current_user.id, Contact.contact_id == recipient_id, Contact.is_blocked == True)
+                    )
+                )
+            )
+            if block_check.scalar_one_or_none():
+                raise HTTPException(status_code=403, detail="Cannot send message. This contact is blocked.")
+
     now = datetime.utcnow()
     time_str = now.strftime("%I:%M %p")
     msg_id = f"msg_{int(now.timestamp() * 1000)}"

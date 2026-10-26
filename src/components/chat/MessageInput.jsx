@@ -19,7 +19,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useUiStore } from '../../stores/uiStore';
 import { useTranslation } from '../../hooks/useTranslation';
 import { wsService } from '../../services/websocket';
-import { uploadApi } from '../../services/api';
+import { resolveBackendUrl, uploadApi } from '../../services/api';
 
 export default function MessageInput({ onOpenMediaModal }) {
   const [text, setText] = useState("");
@@ -196,7 +196,7 @@ export default function MessageInput({ onOpenMediaModal }) {
       });
       const uploadResult = await uploadApi.uploadFile(file);
       const rawAudioUrl = uploadResult.url || '';
-      const audioUrl = rawAudioUrl.startsWith('http') ? rawAudioUrl : `http://localhost:8000${rawAudioUrl}`;
+      const audioUrl = resolveBackendUrl(rawAudioUrl);
 
       sendMessage({
         type: 'audio',

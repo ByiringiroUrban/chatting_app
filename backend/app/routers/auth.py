@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, and_
 from app.database import get_db
 from app.models.user import User, Contact
 from app.schemas.all_schemas import (
     RegisterRequest, LoginRequest, SendOtpRequest, VerifyOtpRequest, ResetPasswordRequest,
-    ResetPasswordConfirmRequest, TokenResponse, UserResponse, UserUpdateRequest, ContactResponse, ContactCreateRequest
+    ResetPasswordConfirmRequest, TokenResponse, UserResponse, UserUpdateRequest, ContactResponse, ContactCreateRequest, ContactUpdateRequest
 )
 from app.core.security import hash_password, verify_password, create_access_token
 from app.core.dependencies import get_current_user
@@ -389,6 +389,27 @@ async def list_contacts(
         for c in contacts
     ]
 
+# In-memory search rate limiter: { user_id: [timestamps] }
+_SEARCH_RATE_LIMIT = {}
+
+def normalize_phone(phone_str: str) -> str:
+    """Normalize phone number to international format, particularly for Rwanda (+250) or E.164"""
+    if not phone_str:
+        return ""
+    digits = "".join(ch for ch in phone_str if ch.isdigit())
+    if phone_str.strip().startswith("+"):
+        return f"+{digits}"
+    # If 9 digits starting with 7, assume Rwandan mobile +2507...
+    if len(digits) == 9 and digits.startswith("7"):
+        return f"+250{digits}"
+    # If 10 digits starting with 07, assume Rwandan mobile 07... -> +2507...
+    if len(digits) == 10 and digits.startswith("07"):
+        return f"+250{digits[1:]}"
+    # If starts with 250
+    if len(digits) == 12 and digits.startswith("250"):
+        return f"+{digits}"
+    return f"+{digits}" if digits else phone_str.strip()
+
 @router.get("/users/search")
 async def search_users(
     q: str = "",
@@ -397,36 +418,60 @@ async def search_users(
 ):
     """
     Separate discovery endpoint. Does NOT expose conversations, messages, or private contacts.
-    Only returns public user profile metadata for searching.
+    Only returns minimal profile information needed to identify the person.
+    Rate-limited to prevent bulk scraping/enumeration.
     """
-    query_text = q.strip().lower()
-    if not query_text:
+    now = time.time()
+    user_searches = _SEARCH_RATE_LIMIT.get(current_user.id, [])
+    # Keep only timestamps in last 60 seconds
+    user_searches = [t for t in user_searches if now - t < 60]
+    if len(user_searches) >= 30: # 30 searches per minute limit
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Search rate limit reached. Please wait a moment before searching again."
+        )
+    user_searches.append(now)
+    _SEARCH_RATE_LIMIT[current_user.id] = user_searches
+
+    raw_query = q.strip()
+    if not raw_query:
         return []
 
+    query_lower = raw_query.lower()
+    clean_username = query_lower.lstrip('@')
+    normalized_phone = normalize_phone(raw_query)
+
+    # Respect user discovery settings: if user has settings.discoverable == False, exclude them
     conditions = [
         User.id != current_user.id,
         or_(
-            User.name.ilike(f"%{query_text}%"),
-            User.username.ilike(f"%{query_text}%"),
-            User.phone.ilike(f"%{query_text}%"),
-            User.email.ilike(f"%{query_text}%")
+            User.name.ilike(f"%{query_lower}%"),
+            User.username.ilike(clean_username),
+            User.email.ilike(query_lower),
+            User.phone == raw_query,
+            User.phone == normalized_phone
         )
     ]
-    result = await db.execute(select(User).where(and_(*conditions)).limit(20))
+    result = await db.execute(select(User).where(and_(*conditions)).limit(15))
     users = result.scalars().all()
 
-    return [
-        {
+    # Filter out users who disabled discovery in their profile settings
+    visible_users = []
+    for u in users:
+        u_settings = u.settings or {}
+        if u_settings.get("discoverable", True) is False:
+            continue
+        visible_users.append({
             "id": u.id,
             "name": u.name,
             "username": u.username,
             "avatar": u.avatar,
-            "bio": u.bio,
+            "bio": u.bio or "Muraho member",
             "phone": u.phone,
             "status": u.status
-        }
-        for u in users
-    ]
+        })
+
+    return visible_users
 
 @router.post("/users/contacts")
 async def add_contact(
@@ -434,12 +479,26 @@ async def add_contact(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Lookup target user to grab details
+    # Lookup target user
     target_res = await db.execute(select(User).where(User.id == req.contactId))
     target_user = target_res.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User to add as contact not found.")
+
+    # Check if contact already exists
+    contact_record_id = f"cnt_{current_user.id}_{req.contactId}"
+    existing_res = await db.execute(select(Contact).where(Contact.id == contact_record_id))
+    existing_contact = existing_res.scalar_one_or_none()
+
+    if existing_contact:
+        # Update existing contact nickname/label
+        existing_contact.name = req.name or existing_contact.name
+        existing_contact.label = req.label or existing_contact.label
+        await db.commit()
+        return {"success": True, "message": "Contact updated successfully"}
 
     new_contact = Contact(
-        id=f"cnt_{current_user.id}_{req.contactId}",
+        id=contact_record_id,
         user_id=current_user.id,
         contact_id=req.contactId,
         name=req.name or (target_user.name if target_user else "Contact"),
@@ -454,3 +513,60 @@ async def add_contact(
     db.add(new_contact)
     await db.commit()
     return {"success": True, "message": "Contact added successfully"}
+
+@router.patch("/users/contacts/{contact_id}")
+async def update_contact(
+    contact_id: str,
+    req: ContactUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates nickname or label privately for the user's saved contact.
+    Does not modify the other user's actual profile.
+    """
+    result = await db.execute(
+        select(Contact).where(
+            Contact.user_id == current_user.id,
+            or_(Contact.contact_id == contact_id, Contact.id == contact_id)
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found in your address book.")
+
+    if req.name is not None:
+        contact.name = req.name
+    if req.label is not None:
+        contact.label = req.label
+    if req.isFavorite is not None:
+        contact.is_favorite = req.isFavorite
+    if req.isBlocked is not None:
+        contact.is_blocked = req.isBlocked
+
+    await db.commit()
+    return {"success": True, "message": "Contact updated"}
+
+@router.delete("/users/contacts/{contact_id}")
+async def delete_contact(
+    contact_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Removes a contact from user's address book.
+    Preserves other person's account and chat history.
+    """
+    result = await db.execute(
+        select(Contact).where(
+            Contact.user_id == current_user.id,
+            or_(Contact.contact_id == contact_id, Contact.id == contact_id)
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+
+    await db.delete(contact)
+    await db.commit()
+    return {"success": True, "message": "Contact removed from your address book"}

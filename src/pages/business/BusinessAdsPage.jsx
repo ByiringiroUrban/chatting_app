@@ -6,7 +6,7 @@ import Input from '../../components/common/Input';
 import Badge from '../../components/common/Badge';
 import { useAdStore } from '../../stores/adStore';
 import { useUiStore } from '../../stores/uiStore';
-import { uploadApi } from '../../services/api';
+import { resolveBackendUrl, uploadApi } from '../../services/api';
 import { 
   Megaphone, 
   Plus, 
@@ -86,7 +86,7 @@ export default function BusinessAdsPage() {
       try {
         const uploadResult = await uploadApi.uploadFile(creativeFile);
         const rawUrl = uploadResult.url || '';
-        finalCreativeUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`;
+        finalCreativeUrl = resolveBackendUrl(rawUrl);
       } catch (err) {
         console.error("Ad creative upload failed:", err);
         showToast("Failed to upload creative banner", "error");

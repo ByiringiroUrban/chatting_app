@@ -5,7 +5,7 @@ import Input from '../common/Input';
 import { useStatusStore } from '../../stores/statusStore';
 import { useUiStore } from '../../stores/uiStore';
 import { Type, Image, Sparkles, Upload, Loader2 } from 'lucide-react';
-import { uploadApi } from '../../services/api';
+import { resolveBackendUrl, uploadApi } from '../../services/api';
 
 export default function CreateStatusModal() {
   const { isCreateModalOpen, setCreateModalOpen, addStatus } = useStatusStore();
@@ -72,7 +72,7 @@ export default function CreateStatusModal() {
       try {
         const uploadResult = await uploadApi.uploadFile(selectedFile);
         const rawUrl = uploadResult.url || '';
-        const mediaUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`;
+        const mediaUrl = resolveBackendUrl(rawUrl);
         addStatus({
           type: 'image',
           mediaUrl,

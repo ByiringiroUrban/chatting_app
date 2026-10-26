@@ -1,4 +1,13 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+const BACKEND_ORIGIN = new URL(API_BASE_URL).origin;
+
+export function resolveBackendUrl(url) {
+  if (!url || /^(?:[a-z]+:)?\/\//i.test(url) || /^(?:blob|data):/i.test(url)) {
+    return url;
+  }
+
+  return new URL(url, `${BACKEND_ORIGIN}/`).toString();
+}
 
 async function request(endpoint, options = {}) {
   const token = localStorage.getItem("muraho_access_token");
@@ -42,6 +51,9 @@ export const authApi = {
   getMe: () => request("/users/me"),
   updateMe: (data) => request("/users/me", { method: "PATCH", body: JSON.stringify(data) }),
   getContacts: () => request("/users/contacts"),
+  addContact: (data) => request("/users/contacts", { method: "POST", body: JSON.stringify(data) }),
+  updateContact: (id, data) => request(`/users/contacts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteContact: (id) => request(`/users/contacts/${id}`, { method: "DELETE" }),
   searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(q)}`),
   forgotPassword: (emailOrPhone) =>
     request("/auth/forgot-password", {

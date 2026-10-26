@@ -47,53 +47,102 @@ export const useContactStore = create((set, get) => ({
     }
   },
 
-  addContact: async ({ name, phone, email, bio, avatar, label }) => {
-    const newContact = {
-      id: `user_${Date.now()}`,
-      name,
-      username: name.toLowerCase().replace(/\s+/g, '_'),
-      phone,
-      email: email || `${name.toLowerCase().replace(/\s+/g, '.')}@example.rw`,
-      bio: bio || "Muraho user",
-      avatar: avatar || null,
-      status: "offline",
-      lastSeen: "Recently added",
-      isFavorite: false,
-      isBlocked: false,
-      label: label || "Contact"
-    };
-
-    set((state) => {
-      const updated = [newContact, ...state.contacts];
-      localStorage.setItem(CONTACTS_STORAGE, JSON.stringify(updated));
-      return { contacts: updated, isAddModalOpen: false };
-    });
+  addContact: async ({ contactId, name, phone, email, bio, avatar, label }) => {
+    try {
+      const payload = {
+        contactId: contactId || `user_${Date.now()}`,
+        name,
+        phone,
+        email,
+        label: label || "Contact"
+      };
+      await authApi.addContact(payload);
+      await get().fetchContacts();
+      set({ isAddModalOpen: false });
+    } catch (e) {
+      console.warn("Failed to add contact on server:", e.message);
+      // Fallback local update
+      const newContact = {
+        id: contactId || `user_${Date.now()}`,
+        name,
+        phone,
+        email,
+        bio: bio || "Muraho user",
+        avatar: avatar || null,
+        status: "offline",
+        lastSeen: "Recently",
+        isFavorite: false,
+        isBlocked: false,
+        label: label || "Contact"
+      };
+      set((state) => {
+        const updated = [newContact, ...state.contacts];
+        localStorage.setItem(getContactsStorageKey(), JSON.stringify(updated));
+        return { contacts: updated, isAddModalOpen: false };
+      });
+    }
   },
 
-  toggleFavorite: (contactId) => {
+  updateContactNickname: async (contactId, newName, newLabel) => {
+    try {
+      await authApi.updateContact(contactId, { name: newName, label: newLabel });
+    } catch (e) {
+      console.warn("Failed to update contact on server:", e);
+    }
     set((state) => {
       const updated = state.contacts.map(c =>
-        c.id === contactId ? { ...c, isFavorite: !c.isFavorite } : c
+        c.id === contactId || c.contactId === contactId
+          ? { ...c, name: newName || c.name, label: newLabel !== undefined ? newLabel : c.label }
+          : c
       );
-      localStorage.setItem(CONTACTS_STORAGE, JSON.stringify(updated));
+      localStorage.setItem(getContactsStorageKey(), JSON.stringify(updated));
       return { contacts: updated };
     });
   },
 
-  toggleBlock: (contactId) => {
+  toggleFavorite: async (contactId) => {
+    const contact = get().contacts.find(c => c.id === contactId);
+    const newStatus = !contact?.isFavorite;
+    try {
+      await authApi.updateContact(contactId, { isFavorite: newStatus });
+    } catch (e) {
+      console.warn("Failed to update favorite on server:", e);
+    }
     set((state) => {
       const updated = state.contacts.map(c =>
-        c.id === contactId ? { ...c, isBlocked: !c.isBlocked } : c
+        c.id === contactId ? { ...c, isFavorite: newStatus } : c
       );
-      localStorage.setItem(CONTACTS_STORAGE, JSON.stringify(updated));
+      localStorage.setItem(getContactsStorageKey(), JSON.stringify(updated));
       return { contacts: updated };
     });
   },
 
-  deleteContact: (contactId) => {
+  toggleBlock: async (contactId) => {
+    const contact = get().contacts.find(c => c.id === contactId);
+    const newStatus = !contact?.isBlocked;
+    try {
+      await authApi.updateContact(contactId, { isBlocked: newStatus });
+    } catch (e) {
+      console.warn("Failed to update block status on server:", e);
+    }
     set((state) => {
-      const updated = state.contacts.filter(c => c.id !== contactId);
-      localStorage.setItem(CONTACTS_STORAGE, JSON.stringify(updated));
+      const updated = state.contacts.map(c =>
+        c.id === contactId ? { ...c, isBlocked: newStatus } : c
+      );
+      localStorage.setItem(getContactsStorageKey(), JSON.stringify(updated));
+      return { contacts: updated };
+    });
+  },
+
+  deleteContact: async (contactId) => {
+    try {
+      await authApi.deleteContact(contactId);
+    } catch (e) {
+      console.warn("Failed to delete contact on server:", e);
+    }
+    set((state) => {
+      const updated = state.contacts.filter(c => c.id !== contactId && c.contactId !== contactId);
+      localStorage.setItem(getContactsStorageKey(), JSON.stringify(updated));
       return {
         contacts: updated,
         selectedContact: state.selectedContact?.id === contactId ? null : state.selectedContact

@@ -85,6 +85,12 @@ class ContactCreateRequest(BaseModel):
     email: Optional[str] = None
     label: Optional[str] = None
 
+class ContactUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    label: Optional[str] = None
+    isFavorite: Optional[bool] = None
+    isBlocked: Optional[bool] = None
+
 # ----------------- MESSAGE SCHEMAS -----------------
 
 class ReactionItem(BaseModel):

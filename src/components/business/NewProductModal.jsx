@@ -5,7 +5,7 @@ import Input from '../common/Input';
 import { useBusinessStore } from '../../stores/businessStore';
 import { useUiStore } from '../../stores/uiStore';
 import { Upload, Loader2 } from 'lucide-react';
-import { uploadApi } from '../../services/api';
+import { resolveBackendUrl, uploadApi } from '../../services/api';
 
 export default function NewProductModal() {
   const { isProductModalOpen, setProductModalOpen, editingProduct, addProduct, updateProduct } = useBusinessStore();
@@ -80,7 +80,7 @@ export default function NewProductModal() {
       try {
         const uploadResult = await uploadApi.uploadFile(imageFile);
         const rawUrl = uploadResult.url || '';
-        finalImageUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`;
+        finalImageUrl = resolveBackendUrl(rawUrl);
       } catch (err) {
         console.error("Product image upload failed:", err);
         showToast("Failed to upload product image", "error");

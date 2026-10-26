@@ -198,8 +198,29 @@ export default function NewChatModal({ isOpen, onClose }) {
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  No users found matching "{query}"
+                <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">No user found matching "{query}"</p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-[240px]">
+                    This person might not be on Muraho yet or has disabled public discovery.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.share) {
+                        navigator.share({
+                          title: 'Join me on Muraho Chat',
+                          text: `Hey! Chat with me privately on Muraho Chatting app: ${window.location.origin}`,
+                          url: window.location.origin,
+                        }).catch(() => {});
+                      } else {
+                        navigator.clipboard?.writeText(window.location.origin);
+                        showToast("Invitation link copied to clipboard!", "success");
+                      }
+                    }}
+                    className="mt-3 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" /> Invite to Muraho
+                  </button>
                 </div>
               )
             ) : (
